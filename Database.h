@@ -7,8 +7,9 @@ class Database
     public:
         Database();
         ~Database();
-        bool db_verify_login(const std::string& username, const std::string& password);
+        int db_verify_login(const std::string& username, const std::string& password);
         int db_new_user(const std::string& username, const std::string& password, const std::string& path_to_pfp = "");
+        int check_unique_username(const std::string& username);
     private:
         sqlite3* DB;
         void init_database();

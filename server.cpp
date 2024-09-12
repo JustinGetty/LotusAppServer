@@ -120,29 +120,25 @@ void handle_client(int client_socket, Database* DB)
 
         std::cout << "Username: " << username << "\nPassword: " << password << std::endl;
 
-        bool verification_status = DB->db_verify_login(username, password);
-        if (verification_status == false){
-            std::cout << "DB fucked" << std::endl;
+        int verification_status = DB->db_verify_login(username, password);
+
+        if (verification_status == 1){
+            std::cerr << "User Verified. Good!" << std::endl;
+            std::string msg = "verification_succeeded|";
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        } else if (verification_status == -1) {
+            std::cerr << "Error Verifying User" << std::endl;
+            //send to client
+            std::string msg = "Error Verifying|";
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        } else if (verification_status == 0) {
+            std::cout << "User Not Found" << std::endl;
             std::string msg = "verification_failed|";
             send(client_socket, msg.c_str(), msg.size(), 0);
         }
-
-        else if (verification_status == true){
-            //append end character to detect, phrase better, 
-            std::string msg = "verification_succeeded|";
-            ssize_t bytes_sent = send(client_socket, msg.c_str(), msg.size(), 0);
-            if (bytes_sent < 0) {
-                std::cerr << "Error sending data: " << strerror(errno) << std::endl;
-            } else if (bytes_sent != msg.size()) {
-                std::cerr << "Not all data was sent!" << std::endl;
-            }
-        }
-
         else{
             std::cerr << "Major error verifying" << std::endl;
         }
-
-
         std::cout << "Verification completed" << std::endl;
 
      } else if (data_type == "new_user")
@@ -165,12 +161,39 @@ void handle_client(int client_socket, Database* DB)
         std::string password = data.substr(data.find('|') + 1);
 
         std::cout << "New Username: " << username << "\nNew Password: " << password << std::endl;
-        if (DB->db_new_user(username, password) == -1) {
-            std::cerr << "FAILED TO INSERT USERNAME AND PASSWORD SO BROKEN" << std::endl;
-            exit(-1);
+
+        //check if username already in use
+        int username_in_use = DB->check_unique_username(username);
+
+        if (username_in_use == 0){
+            std::cerr << "Username Available!" << std::endl;
+            std::string msg = "Username Available|";
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        } else if (username_in_use == -1) {
+            std::cerr << "Error Checking Username" << std::endl;
+            //send to client
+            std::string msg = "Error Checking Username|";
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        } else if (username_in_use == 1) {
+            std::cout << "Username Taken!" << std::endl;
+            std::string msg = "Username Taken|";
+            send(client_socket, msg.c_str(), msg.size(), 0);
+
         }
-        std::cout << "username and password added" << std::endl;
-        
+
+        if (username_in_use == 0){
+            int insert_return = DB->db_new_user(username, password);
+
+            if (insert_return == -1){
+                std::cerr << "User not added" << std::endl;
+            }
+            else if (insert_return == 0){
+                std::cout << "User added" << std::endl;
+            }
+        } 
+        else {
+            std::cout << "Username not unique so its not added" << std::endl;
+        }
      } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
 	 }
@@ -188,7 +211,6 @@ int main()
 	
 	Database* DB = new Database;
 
-    std::cout << "username verified correctly" << std::endl;
     std::string chat_line;
     std::cout << "Starting the server ..." << std::endl;
 

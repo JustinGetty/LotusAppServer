@@ -15,7 +15,6 @@ Database::~Database() {
 
 void Database::init_database()
 {
-    
     int exit = sqlite3_open("/home/ubuntu/Server/Database/ServerDatabase.sqlite", &DB);
 
     if (exit != SQLITE_OK) {
@@ -36,8 +35,33 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
    return 0;
 }
 
+static int verify_callback(void *existsFlag, int argc, char **argv, char **colNames) {
+    int *flag = (int*)existsFlag;
+    if (argv[0]) {
+        *flag = atoi(argv[0]);  // Convert the result ('1' or '0') to an integer and store it in *flag
+    }
+    return 0;  
+}
+
+int row_exists(sqlite3* DB, const char *sql)
+{
+    char *errMsg = 0;
+    int exists = 0;  
+
+    int rc = sqlite3_exec(DB, sql, verify_callback, &exists, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+        return -1;  
+    }
+
+    //1 for exists, 0 for doesnt
+    return exists;
+}
+
 //call this to test in main
-bool Database::db_verify_login(const std::string& username, const std::string& password)
+int Database::db_verify_login(const std::string& username, const std::string& password)
 {
 
     if (DB == nullptr) {
@@ -49,26 +73,10 @@ bool Database::db_verify_login(const std::string& username, const std::string& p
 
     std::cout << verify_query << std::endl;
     const char* query_cstr = verify_query.c_str();
-    sqlite3_stmt* statement;
 
-    int result = sqlite3_prepare_v2(DB, query_cstr, -1, &statement, 0);
+    int exists = row_exists(DB, query_cstr);
 
-    std::cout << "result: " << result << std::endl;
-    if (result == SQLITE_OK)
-    {
-        std::cout << "good query" << std::endl;
-        int step_result = sqlite3_step(statement);
-        if (step_result == SQLITE_ROW) {
-            int exists = sqlite3_column_int(statement, 0);
-            sqlite3_finalize(statement);
-            return exists;
-        }
-    } else {
-        std::cerr << "Failed to execute ID verification query: " << sqlite3_errmsg(DB) << std::endl;
-    }
-
-    sqlite3_finalize(statement);
-    return false;
+    return exists;
 }
 
 int Database::db_new_user(const std::string& username, const std::string& password, const std::string& path_to_pfp)
@@ -109,7 +117,6 @@ int Database::db_new_user(const std::string& username, const std::string& passwo
     std::string insert_usr_query;
     if (path_to_pfp == "")
     {
-
         insert_usr_query = "INSERT INTO users(id, username, password) VALUES(" + str_user_id + ", '" + username + "', '" + password + "');";
         std::cout << "No pfp query: " << insert_usr_query << std::endl;
 
@@ -129,8 +136,9 @@ int Database::db_new_user(const std::string& username, const std::string& passwo
     {
         fprintf(stderr, "SQL error: %s\n", zErrMsg);
         sqlite3_free(zErrMsg);
+        return -1;
     } else {
-        fprintf(stdout, "Succesfull insertion\n");
+        fprintf(stdout, "Succesful insertion\n");
     }
     //dont forget to update max id in db
 
@@ -144,9 +152,27 @@ int Database::db_new_user(const std::string& username, const std::string& passwo
     {
         fprintf(stderr, "SQL error: %s\n", zErrMsg);
         sqlite3_free(zErrMsg);
+        std::cerr << "Max user ID not updated, major problem" << std::endl;
     } else {
-        fprintf(stdout, "Successfull Update\n");
+        fprintf(stdout, "Successful Update\n");
     }
     return 0;
+
+}
+
+int Database::check_unique_username(const std::string& username)
+{
+    int exists;
+    if (DB == nullptr) {
+        std::cerr << "Database is closed, cannot check for username" << std::endl;
+        return false;
+    }
+    std::string check_username_query = "SELECT EXISTS (SELECT 1 FROM users WHERE username = '" + username + "');";
+    std::cout << "Check username query: " << check_username_query << std::endl;
+
+    const char* check_username_cquery = check_username_query.c_str();
+    exists = row_exists(DB, check_username_cquery);
+
+    return exists;
 
 }
