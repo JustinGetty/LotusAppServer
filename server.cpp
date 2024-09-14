@@ -12,8 +12,13 @@
 #include "Database.h"
 #include <sqlite3.h>
 
-//TODO - why do chat logs have line returns
-
+/* 
+TODO
+- Remove legacy code, ln curses, chat logs, etc. Implement logs in db
+- Restructrue legacy functions
+- Critical: New thread per client. Figure out how multiple clients will work, everytime there is 
+a connection, create a new thread.
+ */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
 
@@ -52,7 +57,8 @@ void handle_client(int client_socket, Database* DB)
     
     while (true)
     {
-
+    
+    std::cout << "Reading Header" << std::endl;
     std::string data_type = read_header(client_socket);
     if (data_type.empty()) {
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
@@ -143,6 +149,7 @@ void handle_client(int client_socket, Database* DB)
 
      } else if (data_type == "new_user")
      {
+        std::cerr << "New User Process Started -----------" << std::endl;
         //add pfp insert later
         std::string data;
         char buffer[1024];
