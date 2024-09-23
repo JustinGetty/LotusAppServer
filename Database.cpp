@@ -45,26 +45,22 @@ static int verify_callback(void *existsFlag, int argc, char **argv, char **colNa
 std::string Database::select_from_database_gen(const std::string& query)
 {
 
+    char *zErrMsg = 0;
+    int rc;
+    const char* data = "Callback function called";
     std::string query_result;
     const char* id_query_cstr = query.c_str();
     sqlite3_stmt* statement;
 
-    int result = sqlite3_prepare_v2(DB, id_query_cstr, -1, &statement, 0);
+    rc = sqlite3_exec(DB, id_query_cstr, callback, (void*)data, &zErrMsg);
 
-    if (result == SQLITE_OK)
-    {
-        std::cout << "good retrieval query" << std::endl;
-        int step_result = sqlite3_step(statement);
-        if (step_result == SQLITE_ROW){
-            query_result = sqlite3_column_int(statement, 0);
-            sqlite3_finalize(statement);
-        }
+    if (rc == SQLITE_OK) {
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+    } else {
+        fprintf(stdout, "Operation done successfully\n");
     }
-    else 
-    {
-        return "SQL ERROR PROBLEM ISSUE ERROR IN select_from_database_gen function";
-    }
-    return query_result;
+   return "good"; 
 }
 int row_exists(sqlite3* DB, const char *sql)
 {
@@ -216,6 +212,8 @@ int Database::new_friend_request(int sender_id, const std::string& reciever_user
     std::string get_id_query = "SELECT id FROM users WHERE USERNAME = '" + reciever_username + "';";
 
     std::string reciever_id = select_from_database_gen(get_id_query);
+
+    std::cout << "Reciever ID: " << reciever_id << std::endl;
     return 0;
 
 }

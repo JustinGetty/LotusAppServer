@@ -64,6 +64,7 @@ void handle_client(int client_socket, Database* DB)
 
 
     int stat = DB->new_friend_request(2, "username"); 
+    std::cout << "New Friend Request Status: " << stat << std::endl;
 
 
 
