@@ -15,7 +15,7 @@ Database::~Database() {
 
 void Database::init_database()
 {
-    int exit = sqlite3_open("/home/ubuntu/Server/Database/ServerDatabase.sqlite", &DB);
+    int exit = sqlite3_open("/root/infinite/LotusAppServer/Database/ServerDatabase.sqlite", &DB);
 
     if (exit != SQLITE_OK) {
         std::cerr << "Error opening database: " << sqlite3_errmsg(DB) << std::endl;
@@ -42,7 +42,30 @@ static int verify_callback(void *existsFlag, int argc, char **argv, char **colNa
     }
     return 0;  
 }
+std::string Database::select_from_database_gen(const std::string& query)
+{
 
+    std::string query_result;
+    const char* id_query_cstr = query.c_str();
+    sqlite3_stmt* statement;
+
+    int result = sqlite3_prepare_v2(DB, id_query_cstr, -1, &statement, 0);
+
+    if (result == SQLITE_OK)
+    {
+        std::cout << "good retrieval query" << std::endl;
+        int step_result = sqlite3_step(statement);
+        if (step_result == SQLITE_ROW){
+            query_result = sqlite3_column_int(statement, 0);
+            sqlite3_finalize(statement);
+        }
+    }
+    else 
+    {
+        return "SQL ERROR PROBLEM ISSUE ERROR IN select_from_database_gen function";
+    }
+    return query_result;
+}
 int row_exists(sqlite3* DB, const char *sql)
 {
     char *errMsg = 0;
@@ -174,5 +197,25 @@ int Database::check_unique_username(const std::string& username)
     exists = row_exists(DB, check_username_cquery);
 
     return exists;
+
+}
+
+int Database::new_friend_request(int sender_id, const std::string& reciever_username)
+{
+    /* 
+    Server end:
+    1. convert recieve username to an id and log in db
+    2. user will either accept or decline, sending signal back here which will be processed accordingly. 
+    3. if accepted then signal will be send and the friend will be added to both sender and reciever's user table as next available friend
+
+    Client end:
+    1. Select all from tables where reciever is (inbound) X or sender id is Y (outbound)
+    2. have accept/decline button to update the server, this is where server end starts
+    */
+
+    std::string get_id_query = "SELECT id FROM users WHERE USERNAME = '" + reciever_username + "';";
+
+    std::string reciever_id = select_from_database_gen(get_id_query);
+    return 0;
 
 }

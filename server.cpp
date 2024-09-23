@@ -13,11 +13,17 @@
 #include <sqlite3.h>
 
 /* 
+Compile:
+g++ -std=c++11 server.cpp Database.cpp -o server -lsqlite3
+
 TODO
 - Remove legacy code, ln curses, chat logs, etc. Implement logs in db
 - Restructrue legacy functions
 - Critical: New thread per client. Figure out how multiple clients will work, everytime there is 
-a connection, create a new thread.
+    a connection, create a new thread.
+- Turn all message types to ints rather than strings
+- add classes to server.cpp
+- in db, fix user to have autoincrement id and not manually pulled from server_info
  */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
@@ -51,10 +57,27 @@ void handle_client(int client_socket, Database* DB)
 	}
     }
     chat_logs.close();
-
+    
     char buff[1024];
     std::fstream chat_logs_append("chat_logs", std::ios::app);
-    
+    /* --------- CLIENT RELATED TESTS AND HANDLING PLAYGROUND ---------------- */
+
+
+    int stat = DB->new_friend_request(2, "username"); 
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /* ---------- END PLAYGROUND ------------------------------------------------ */
     while (true)
     {
     
@@ -201,6 +224,9 @@ void handle_client(int client_socket, Database* DB)
         else {
             std::cout << "Username not unique so its not added" << std::endl;
         }
+     } else if (data_type == "new_friend_request"){
+     
+     
      } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
 	 }
@@ -272,15 +298,15 @@ int main()
         return 1;
     }
 
-    //after setting up listen parameters, this will accept connections from the listen queue
-    //if the queue is empty, it wont return until it recieves a connection
 
     char buff[1024];
     std::fstream chat_logs_append("chat_logs", std::ios::app);
+
+    //handle incoming connections
     while (true)
     {
 
-        int client_socket = accept(server_socket, NULL, NULL);
+    int client_socket = accept(server_socket, NULL, NULL);
 	if (client_socket == -1)
 	{
 	std::cerr << "Error accepting connection!" << std::endl;
