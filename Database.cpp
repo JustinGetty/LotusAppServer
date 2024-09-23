@@ -26,8 +26,10 @@ void Database::init_database()
     }
 }
 
+//first arg us user data to be combined with other shit. Have this return the value and not print it
 static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
    int i;
+   //loop over all columns in current row(aka argc) 
    for(i = 0; i<argc; i++) {
       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
    }
