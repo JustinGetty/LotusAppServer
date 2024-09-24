@@ -43,9 +43,26 @@ std::string read_header(int client_socket) {
     }
     return header;
 }
+std::string read_pipe_ended_gen_data(int client_socket) {
+    std::string data;
+    char c;
 
+    while (true) {
+        ssize_t bytes_received = recv(client_socket, &c, 1, 0);
+        if (bytes_received <= 0) {
+            return ""; 
+        }
+        if (c == '|') {
+            break;  
+        }
+        data += c; 
+    }
+    return data;
+}
 void handle_client(int client_socket, Database* DB)
 {
+
+    std::cout << "here" <<std::endl;
     std::string chat_line;
     std::fstream chat_logs("chat_logs", std::ios::in | std::ios::out | std::ios::app);
     while (getline(chat_logs, chat_line))
@@ -62,17 +79,6 @@ void handle_client(int client_socket, Database* DB)
     std::fstream chat_logs_append("chat_logs", std::ios::app);
     /* --------- CLIENT RELATED TESTS AND HANDLING PLAYGROUND ---------------- */
 
-        //1. check if the user exists
-        int user_exists = DB->check_unique_username("username"); // again make this sent from server
-        if (user_exists == 0)
-        {
-            //send back error that it doesnt exists
-            std::cout << "User to be added does not exist" << std::endl;
-        } else if (user_exists == 1)
-        {
-            // process request
-            std::cout << "User to be added exists" << std::endl;
-        }
 
 
 
@@ -86,11 +92,11 @@ void handle_client(int client_socket, Database* DB)
     
     std::cout << "Reading Header" << std::endl;
     std::string data_type = read_header(client_socket);
+    std::cout << "data type read: " << data_type << std::endl;
     if (data_type.empty()) {
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
         break;
     }
-
 	if (data_type == "text")
 	{
 	    char buffer[1024];
@@ -228,21 +234,65 @@ void handle_client(int client_socket, Database* DB)
             std::cout << "Username not unique so its not added" << std::endl;
         }
      } else if (data_type == "new_friend_request"){
-     
+
+
+        std::string data = read_pipe_ended_gen_data(client_socket);
+        std::string receiver_username = data.substr(0, data.find('+')); 
+        //cast to int
+        std::string sender_id = data.substr(data.find('+') + 1); 
         //1. check if the user exists
-        int user_exists = DB->check_unique_username("username"); // again make this sent from server
+        int user_exists = DB->check_unique_username(receiver_username); 
         if (user_exists == 0)
         {
             //send back error that it doesnt exists
-            std::cout << "User to be added does not exist" << std::endl;
+            std::string error_msg = "User to be added does not exist|";
+            std::cout << error_msg << std::endl;
+            send(client_socket, error_msg.c_str(), error_msg.size(), 0);
         } else if (user_exists == 1)
         {
             // process request
-            std::cout << "User to be added does not exist" << std::endl;
+            std::cout << "User to be added exists" << std::endl;
+
+            //get receiver id
+            std::string receiver_id = DB->get_receiver_id(receiver_username);
+
+            //check for duplicatesssssss!!!!!!!!! ADDDd----------------------
+
+            int exists = DB->verify_unique_friend_request(sender_id, receiver_id);
+
+            if (exists == 0){
+                //process
+                std::string query = "INSERT INTO friend_requests(sender_id, reciever_id) VALUES('" + sender_id + "', '" + receiver_id + "');";
+                int result_of_insert = DB->generic_insert_function(query);
+                std::cout << "result of id inserts: " << result_of_insert << std::endl; 
+                std::string error_msg = "Request Send!|";
+                std::cout << error_msg << std::endl;
+                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            }
+
+            if (exists == 1){
+                //send back duplicat message
+                std::string error_msg = "Request to this user already pending|";
+                std::cout << error_msg << std::endl;
+                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            }
+            else {
+                //send back error
+                std::string error_msg = "Verification of request failed|";
+                std::cout << error_msg << std::endl;
+                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            }
+            //insert query here
+
+            //FIXXXXX-------------------------------
+            //sent back success or failure
+        } else {
+            //send another sort of error
+            std::string error_msg = "ERROR: Server error, please try again later.|";
+            std::cout << error_msg << std::endl;
+            send(client_socket, error_msg.c_str(), error_msg.size(), 0);
         }
-        //2. process request
-        int stat = DB->new_friend_request(2, "corvezeo"); //this info will be send and split via socket
-        std::cout << "New Friend Request Status: " << stat << std::endl;
+
      
      } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;

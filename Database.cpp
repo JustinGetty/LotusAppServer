@@ -69,6 +69,28 @@ std::string Database::select_from_database_gen(const std::string& query)
     }
     return val;
 }
+
+int Database::generic_insert_function(std::string query)
+{
+
+    char* zErrMsg = 0;
+    const char* insert_query = query.c_str();
+
+    //int statement_result = sqlite3_prepare_v2(DB, insert_usr_query, -1, &statement, 0);
+
+    int rc = sqlite3_exec(DB, insert_query, callback, 0, &zErrMsg);
+
+    if (rc != SQLITE_OK)
+    {
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+        return -1;
+    } else {
+        fprintf(stdout, "Succesful insertion\n");
+        return 0;
+    }
+    
+}
 int row_exists(sqlite3* DB, const char *sql)
 {
     char *errMsg = 0;
@@ -203,7 +225,7 @@ int Database::check_unique_username(const std::string& username)
 
 }
 
-int Database::new_friend_request(int sender_id, const std::string& reciever_username)
+std::string Database::get_receiver_id(const std::string& reciever_username)
 {
     /* 
     Server end:
@@ -223,6 +245,20 @@ int Database::new_friend_request(int sender_id, const std::string& reciever_user
     //insert
     
 
-    return 0;
+    return reciever_id_result;
+
+}
+
+int Database::verify_unique_friend_request(const std::string& sender_id, const std::string& receiver_id)
+{
+
+    std::string verify_query = "SELECT EXISTS (SELECT 1 FROM friend_requests WHERE sender_id = '" + sender_id + "' AND reciever_id = '" + receiver_id + "');";
+    std::cout << verify_query << std::endl;
+    const char* query_cstr = verify_query.c_str();
+
+    //1 for exists 0 for doesnt, -1 for error
+    int exists = row_exists(DB, query_cstr);
+
+    return exists;
 
 }
