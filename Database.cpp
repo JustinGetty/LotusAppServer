@@ -27,15 +27,18 @@ void Database::init_database()
 }
 
 //first arg us user data to be combined with other shit. Have this return the value and not print it
-static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
+int callback(void *NotUsed, int argc, char **argv, char **azColName) {
    int i;
    //loop over all columns in current row(aka argc) 
    for(i = 0; i<argc; i++) {
       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
    }
    printf("\n");
+
+
    return 0;
 }
+
 
 static int verify_callback(void *existsFlag, int argc, char **argv, char **colNames) {
     int *flag = (int*)existsFlag;
@@ -46,23 +49,25 @@ static int verify_callback(void *existsFlag, int argc, char **argv, char **colNa
 }
 std::string Database::select_from_database_gen(const std::string& query)
 {
-
-    char *zErrMsg = 0;
-    int rc;
-    const char* data = "Callback function called";
-    std::string query_result;
+    std::string val = "";
     const char* id_query_cstr = query.c_str();
     sqlite3_stmt* statement;
 
-    rc = sqlite3_exec(DB, id_query_cstr, callback, (void*)data, &zErrMsg);
+    int result = sqlite3_prepare_v2(DB, id_query_cstr, -1, &statement, 0);
 
-    if (rc == SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", zErrMsg);
-        sqlite3_free(zErrMsg);
-    } else {
-        fprintf(stdout, "Operation done successfully\n");
+    if (result == SQLITE_OK)
+    {
+        std::cout << "good gen query" << std::endl;
+        int step_result = sqlite3_step(statement);
+        if (step_result == SQLITE_ROW){
+            val = std::to_string(sqlite3_column_int(statement, 0));
+            sqlite3_finalize(statement);
+        }
     }
-   return "good"; 
+    else {
+        return "ERROR IN FUNCTION: select_from_database_gen";
+    }
+    return val;
 }
 int row_exists(sqlite3* DB, const char *sql)
 {
@@ -212,10 +217,12 @@ int Database::new_friend_request(int sender_id, const std::string& reciever_user
     */
 
     std::string get_id_query = "SELECT id FROM users WHERE USERNAME = '" + reciever_username + "';";
+    std::string reciever_id_result = select_from_database_gen(get_id_query);
 
-    std::string reciever_id = select_from_database_gen(get_id_query);
 
-    std::cout << "Reciever ID: " << reciever_id << std::endl;
+    //insert
+    
+
     return 0;
 
 }

@@ -12,6 +12,7 @@ class Database
         int check_unique_username(const std::string& username);
         int new_friend_request(int sender_id, const std::string& reciever_username);
         std::string select_from_database_gen(const std::string& query);
+        sqlite3 get_database();
 
     private:
         sqlite3* DB;

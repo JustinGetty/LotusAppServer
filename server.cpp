@@ -62,15 +62,17 @@ void handle_client(int client_socket, Database* DB)
     std::fstream chat_logs_append("chat_logs", std::ios::app);
     /* --------- CLIENT RELATED TESTS AND HANDLING PLAYGROUND ---------------- */
 
-
-    int stat = DB->new_friend_request(2, "username"); 
-    std::cout << "New Friend Request Status: " << stat << std::endl;
-
-
-
-
-
-
+        //1. check if the user exists
+        int user_exists = DB->check_unique_username("username"); // again make this sent from server
+        if (user_exists == 0)
+        {
+            //send back error that it doesnt exists
+            std::cout << "User to be added does not exist" << std::endl;
+        } else if (user_exists == 1)
+        {
+            // process request
+            std::cout << "User to be added exists" << std::endl;
+        }
 
 
 
@@ -227,6 +229,20 @@ void handle_client(int client_socket, Database* DB)
         }
      } else if (data_type == "new_friend_request"){
      
+        //1. check if the user exists
+        int user_exists = DB->check_unique_username("username"); // again make this sent from server
+        if (user_exists == 0)
+        {
+            //send back error that it doesnt exists
+            std::cout << "User to be added does not exist" << std::endl;
+        } else if (user_exists == 1)
+        {
+            // process request
+            std::cout << "User to be added does not exist" << std::endl;
+        }
+        //2. process request
+        int stat = DB->new_friend_request(2, "corvezeo"); //this info will be send and split via socket
+        std::cout << "New Friend Request Status: " << stat << std::endl;
      
      } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
