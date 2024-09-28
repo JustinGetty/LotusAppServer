@@ -24,6 +24,9 @@ TODO
 - Turn all message types to ints rather than strings
 - add classes to server.cpp
 - in db, fix user to have autoincrement id and not manually pulled from server_info
+- Friend requests needs to be seperate thread to constantly wait, when launched pull everything from db, 
+    then when sent, will update live. If request is sent and user is offline, keep it in db. Same with messages. 
+    Threads need to be asynchronous
  */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
