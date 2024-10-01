@@ -27,6 +27,7 @@ TODO
 - Friend requests needs to be seperate thread to constantly wait, when launched pull everything from db, 
     then when sent, will update live. If request is sent and user is offline, keep it in db. Same with messages. 
     Threads need to be asynchronous
+- Reorg threads to have classes or objects
  */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
@@ -46,7 +47,8 @@ std::string read_header(int client_socket) {
     }
     return header;
 }
-std::string read_pipe_ended_gen_data(int client_socket) {
+std::string read_pipe_ended_gen_data(int client_socket) 
+{
     std::string data;
     char c;
 
@@ -62,181 +64,64 @@ std::string read_pipe_ended_gen_data(int client_socket) {
     }
     return data;
 }
-void handle_client(int client_socket, Database* DB)
+
+void handle_message_client(int client_socket, Database* DB, int user_id)
 {
-
-    std::cout << "here" <<std::endl;
-    std::string chat_line;
-    std::fstream chat_logs("chat_logs", std::ios::in | std::ios::out | std::ios::app);
-    while (getline(chat_logs, chat_line))
-    {
-	if (!chat_line.empty())
-	{
-	    chat_line += "\n";
-	    send(client_socket, chat_line.c_str(), chat_line.size(), 0);
-	}
-    }
-    chat_logs.close();
-    
-    char buff[1024];
-    std::fstream chat_logs_append("chat_logs", std::ios::app);
-    /* --------- CLIENT RELATED TESTS AND HANDLING PLAYGROUND ---------------- */
-
-
-
-
-
-
-
-
-    /* ---------- END PLAYGROUND ------------------------------------------------ */
     while (true)
     {
-    
-    std::cout << "Reading Header" << std::endl;
-    std::string data_type = read_header(client_socket);
-    std::cout << "data type read: " << data_type << std::endl;
-    if (data_type.empty()) {
+        std::cout << "Reading MESSAGE Header" << std::endl;
+        std::string data_type = read_header(client_socket);
+        std::cout << "data type read: " << data_type << std::endl;
+        std::cout << "MESSAGE THREAD WORKING" << std::endl;
+        
+        if (data_type.empty()) {
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
         break;
-    }
-	if (data_type == "text")
-	{
-	    char buffer[1024];
-	    size_t bytes_rec = recv(client_socket, buffer, sizeof(buffer), 0);
-	    if (bytes_rec > 0)
-	    {
-		std::string text(buffer, bytes_rec);
-		std::cout << text << std::endl;;
+        }
 
-		//write to chat logs
-        chat_logs_append << text << std::endl;
-
-    //next two lines are stack overflow code, idk how it works at all 
-	{
-	    std::lock_guard<std::mutex> lock(clients_mutex);
-	    //iterate through all connected sockets(clients) and send the message to each except the og sender
-	    for (int sock : client_sockets)
-        {
-         if (sock != client_socket)
-
-		{
-		    send(sock, text.c_str(), text.size(), 0);
-		}
-	    }
-	}
-             }
-	 } else if (data_type == "image") {
+	    if (data_type == "image") {
          char buffer[1024];
-	 std::vector<char> image_data;
-	 size_t bytes_rec;
-	 while ((bytes_rec = recv(client_socket, buffer, sizeof(buffer), 0)) > 0)
-         {
+	    std::vector<char> image_data;
+	    size_t bytes_rec;
+	    while ((bytes_rec = recv(client_socket, buffer, sizeof(buffer), 0)) > 0)
+        {
              image_data.insert(image_data.end(), buffer, buffer + bytes_rec);
 	     if (bytes_rec < sizeof(buffer))
              {
 		 std::cout << "image recieved" << std::endl;
 		 //should prob be break
              }
-	 }
-
-	 //we have image here now in image_data to save or display
-	 } else if (data_type == "verify_user")
-     {
-        std::string data;
-        char buffer[1024];
-        size_t bytes_rec = recv(client_socket, buffer, sizeof(buffer), 0);
-        if (bytes_rec > 0)
-        {
-            data = std::string(buffer, bytes_rec);
-            std::cout << "Recieved user data to verify: " << data << std::endl;
-        }
-        else 
-        {
-            std::cerr << "Verification info failed to recieve" << std::endl;
-        }
-        //comes in format USERNAME|PASSWORD
-        std::string username = data.substr(0, data.find('|'));
-        std::string password = data.substr(data.find('|') + 1);
-
-        std::cout << "Username: " << username << "\nPassword: " << password << std::endl;
-
-        int verification_status = DB->db_verify_login(username, password);
-
-        if (verification_status == 1){
-            std::cerr << "User Verified. Good!" << std::endl;
-            std::string msg = "verification_succeeded|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-        } else if (verification_status == -1) {
-            std::cerr << "Error Verifying User" << std::endl;
-            //send to client
-            std::string msg = "Error Verifying|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-        } else if (verification_status == 0) {
-            std::cout << "User Not Found" << std::endl;
-            std::string msg = "verification_failed|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-        }
-        else{
-            std::cerr << "Major error verifying" << std::endl;
-        }
-        std::cout << "Verification completed" << std::endl;
-
-     } else if (data_type == "new_user")
-     {
-        std::cerr << "New User Process Started -----------" << std::endl;
-        //add pfp insert later
-        std::string data;
-        char buffer[1024];
-        size_t bytes_rec = recv(client_socket, buffer, sizeof(buffer), 0);
-        if (bytes_rec > 0)
-        {
-            data = std::string(buffer, bytes_rec);
-            std::cout << "Recieved user data to insert: " << data << std::endl;
-        }
-        else 
-        {
-            std::cerr << "Insertion info failed to recieve" << std::endl;
-        }
-        //comes in format USERNAME|PASSWORD
-        std::string username = data.substr(0, data.find('|'));
-        std::string password = data.substr(data.find('|') + 1);
-
-        std::cout << "New Username: " << username << "\nNew Password: " << password << std::endl;
-
-        //check if username already in use
-        int username_in_use = DB->check_unique_username(username);
-
-        if (username_in_use == 0){
-            std::cerr << "Username Available!" << std::endl;
-            std::string msg = "Username Available|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-        } else if (username_in_use == -1) {
-            std::cerr << "Error Checking Username" << std::endl;
-            //send to client
-            std::string msg = "Error Checking Username|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-        } else if (username_in_use == 1) {
-            std::cout << "Username Taken!" << std::endl;
-            std::string msg = "Username Taken|";
-            send(client_socket, msg.c_str(), msg.size(), 0);
-
+	    }
         }
 
-        if (username_in_use == 0){
-            int insert_return = DB->db_new_user(username, password);
+    else {
+         std::cerr << "Unkown message data type: " << data_type << std::endl;
+	}
+    }
+    {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+    }
+    close(client_socket);
+}
 
-            if (insert_return == -1){
-                std::cerr << "User not added" << std::endl;
-            }
-            else if (insert_return == 0){
-                std::cout << "User added" << std::endl;
-            }
-        } 
-        else {
-            std::cout << "Username not unique so its not added" << std::endl;
+void handle_relations_client(int client_socket, Database* DB, int user_id)
+{
+    while (true)
+    {
+        std::cout << "Reading RELATIONS Header" << std::endl;
+        std::string data_type = read_header(client_socket);
+        std::cout << "data type read: " << data_type << std::endl;
+        
+        std::cout << "RELATIONS THREAD WORKING" << std::endl;
+
+        if (data_type.empty()) {
+        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
+        break;
         }
-     } else if (data_type == "new_friend_request"){
+
+
+       if (data_type == "new_friend_request"){
 
 
         std::string data = read_pipe_ended_gen_data(client_socket);
@@ -295,34 +180,11 @@ void handle_client(int client_socket, Database* DB)
             std::cout << error_msg << std::endl;
             send(client_socket, error_msg.c_str(), error_msg.size(), 0);
         }
+       }
 
-     
-     } else {
+    else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
-	 }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(clients_mutex);
-	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
-    }
-    close(client_socket);
-}
-
-void handle_message_client(int client_socket, Database* DB, int user_id)
-{
-    while (true)
-    {
-        std::cout << "Reading MESSAGE Header" << std::endl;
-        std::string data_type = read_header(client_socket);
-        std::cout << "data type read: " << data_type << std::endl;
-        std::cout << "MESSAGE THREAD WORKING" << std::endl;
-        
-        if (data_type.empty()) {
-        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
-        break;
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+	}
     }
     {
     std::lock_guard<std::mutex> lock(clients_mutex);
@@ -330,35 +192,13 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
     }
     close(client_socket);
 }
-
-void handle_relations_client(int client_socket, Database* DB, int user_id)
+void handle_logic_client(int logic_client_socket, Database* DB)
 {
+    //once verified, pull user id and assign to this thread
     while (true)
     {
-        std::cout << "Reading RELATIONS Header" << std::endl;
-        std::string data_type = read_header(client_socket);
-        std::cout << "data type read: " << data_type << std::endl;
-        
-        std::cout << "RELATIONS THREAD WORKING" << std::endl;
-
-        if (data_type.empty()) {
-        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
-        break;
-        }
-        std::this_thread::sleep_for(std::chrono::seconds(4));
-    }
-    {
-    std::lock_guard<std::mutex> lock(clients_mutex);
-	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
-    }
-    close(client_socket);
-}
-void handle_logic_client(int client_socket, Database* DB, int user_id)
-{
-    while (true)
-    {
-        std::cout << "Reading RELATIONS Header" << std::endl;
-        std::string data_type = read_header(client_socket);
+        std::cout << "Reading LOGIC Header" << std::endl;
+        std::string data_type = read_header(logic_client_socket);
         std::cout << "data type read: " << data_type << std::endl;
         std::cout << "LOGIC THREAD WORKING" << std::endl;
 
@@ -366,13 +206,115 @@ void handle_logic_client(int client_socket, Database* DB, int user_id)
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
         break;
         }
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+
+	 if (data_type == "verify_user")
+     {
+        std::cerr << "HIT VERIFY USER" << std::endl;
+        std::string data;
+        char buffer[1024];
+        size_t bytes_rec = recv(logic_client_socket, buffer, sizeof(buffer), 0);
+        if (bytes_rec > 0)
+        {
+//---Breaking here, not recieving fill buffer, something else is receiving the beginning
+            data = std::string(buffer, bytes_rec);
+            std::cout << "Recieved user data to verify: " << data << std::endl;
+        }
+        else 
+        {
+            std::cerr << "Verification info failed to recieve" << std::endl;
+        }
+        //comes in format USERNAME|PASSWORD
+        std::string username = data.substr(0, data.find('|'));
+        std::string password = data.substr(data.find('|') + 1);
+
+        std::cout << "Username: " << username << "\nPassword: " << password << std::endl;
+
+        int verification_status = DB->db_verify_login(username, password);
+
+        if (verification_status == 1){
+            std::cerr << "User Verified. Good!" << std::endl;
+            std::string msg = "verification_succeeded|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+        } else if (verification_status == -1) {
+            std::cerr << "Error Verifying User" << std::endl;
+            //send to client
+            std::string msg = "Error Verifying|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+        } else if (verification_status == 0) {
+            std::cout << "User Not Found" << std::endl;
+            std::string msg = "verification_failed|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+        }
+        else{
+            std::cerr << "Major error verifying" << std::endl;
+        }
+        std::cout << "Verification completed" << std::endl;
+
+     } else if (data_type == "new_user")
+     {
+        std::cerr << "New User Process Started -----------" << std::endl;
+        //add pfp insert later
+        std::string data;
+        char buffer[1024];
+        size_t bytes_rec = recv(logic_client_socket, buffer, sizeof(buffer), 0);
+        if (bytes_rec > 0)
+        {
+            data = std::string(buffer, bytes_rec);
+            std::cout << "Recieved user data to insert: " << data << std::endl;
+        }
+        else 
+        {
+            std::cerr << "Insertion info failed to recieve" << std::endl;
+        }
+        //comes in format USERNAME|PASSWORD
+        std::string username = data.substr(0, data.find('|'));
+        std::string password = data.substr(data.find('|') + 1);
+
+        std::cout << "New Username: " << username << "\nNew Password: " << password << std::endl;
+
+        //check if username already in use
+        int username_in_use = DB->check_unique_username(username);
+
+        if (username_in_use == 0){
+            std::cerr << "Username Available!" << std::endl;
+            std::string msg = "Username Available|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+        } else if (username_in_use == -1) {
+            std::cerr << "Error Checking Username" << std::endl;
+            //send to client
+            std::string msg = "Error Checking Username|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+        } else if (username_in_use == 1) {
+            std::cout << "Username Taken!" << std::endl;
+            std::string msg = "Username Taken|";
+            send(logic_client_socket, msg.c_str(), msg.size(), 0);
+
+        }
+
+        if (username_in_use == 0){
+            int insert_return = DB->db_new_user(username, password);
+
+            if (insert_return == -1){
+                std::cerr << "User not added" << std::endl;
+            }
+            else if (insert_return == 0){
+                std::cout << "User added" << std::endl;
+            }
+        } 
+        else {
+            std::cout << "Username not unique so its not added" << std::endl;
+            }
+        }
+
+    else {
+         std::cerr << "Unkown message data type: " << data_type << std::endl;
+	}
     }
     {
     std::lock_guard<std::mutex> lock(clients_mutex);
-	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), logic_client_socket), client_sockets.end());
     }
-    close(client_socket);
+    close(logic_client_socket);
 }
 int main()
 {
@@ -457,28 +399,28 @@ int main()
 
     std::string handshake_id_data = read_pipe_ended_gen_data(client_socket);
 
-    std::string client_handshake = handshake_id_data.substr(0, handshake_id_data.find("|"));
-    std::string user_id_str = handshake_id_data.substr(handshake_id_data.find("|") + 1);
+    std::string client_handshake = handshake_id_data.substr(0, handshake_id_data.find("+"));
+    std::string user_id_str = handshake_id_data.substr(handshake_id_data.find("+") + 1);
     int user_id = atoi(user_id_str.c_str());
 
     std::cout << "HANDSHAKE: " << client_handshake << " USER ID: " << user_id << std::endl;
 
     if (client_handshake == "LOGIC_MANAGEMENT")
     {
-        std::thread(handle_logic_client, client_socket, DB, user_id).detach();
+        std::thread(handle_logic_client, client_socket, DB).detach();
     }
-    if (client_handshake == "MESSAGE_MANAGEMENT")
+    else if (client_handshake == "MESSAGE_MANAGEMENT")
     {
         std::thread(handle_message_client, client_socket, DB, user_id).detach();
     }
-    if (client_handshake == "RELATION_MANAGEMENT")
+    else if (client_handshake == "RELATION_MANAGEMENT")
     {
         std::thread(handle_relations_client, client_socket, DB, user_id).detach();
     }
     else
     {
         //eventually this should be an error and reject
-	    std::thread(handle_client, client_socket, DB).detach();
+	    //std::thread(handle_client, client_socket, DB).detach();
     }
 
     }
