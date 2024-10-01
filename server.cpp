@@ -309,6 +309,71 @@ void handle_client(int client_socket, Database* DB)
     close(client_socket);
 }
 
+void handle_message_client(int client_socket, Database* DB, int user_id)
+{
+    while (true)
+    {
+        std::cout << "Reading MESSAGE Header" << std::endl;
+        std::string data_type = read_header(client_socket);
+        std::cout << "data type read: " << data_type << std::endl;
+        std::cout << "MESSAGE THREAD WORKING" << std::endl;
+        
+        if (data_type.empty()) {
+        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
+        break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+    }
+    {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+    }
+    close(client_socket);
+}
+
+void handle_relations_client(int client_socket, Database* DB, int user_id)
+{
+    while (true)
+    {
+        std::cout << "Reading RELATIONS Header" << std::endl;
+        std::string data_type = read_header(client_socket);
+        std::cout << "data type read: " << data_type << std::endl;
+        
+        std::cout << "RELATIONS THREAD WORKING" << std::endl;
+
+        if (data_type.empty()) {
+        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
+        break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+    }
+    {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+    }
+    close(client_socket);
+}
+void handle_logic_client(int client_socket, Database* DB, int user_id)
+{
+    while (true)
+    {
+        std::cout << "Reading RELATIONS Header" << std::endl;
+        std::string data_type = read_header(client_socket);
+        std::cout << "data type read: " << data_type << std::endl;
+        std::cout << "LOGIC THREAD WORKING" << std::endl;
+
+        if (data_type.empty()) {
+        std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
+        break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+    }
+    {
+    std::lock_guard<std::mutex> lock(clients_mutex);
+	client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+    }
+    close(client_socket);
+}
 int main()
 {
 	
@@ -361,7 +426,7 @@ int main()
     }
 
     //sets socket up to listen for connections, takes in server socket and max queue
-    if (listen(server_socket, 5) == -1)
+    if (listen(server_socket, 20) == -1)
     {
         std::cerr << "Error listening on the socket!" << std::endl;
         close(server_socket);
@@ -389,7 +454,33 @@ int main()
 	    client_sockets.push_back(client_socket);
 	}
 
-	std::thread(handle_client, client_socket, DB).detach();
+
+    std::string handshake_id_data = read_pipe_ended_gen_data(client_socket);
+
+    std::string client_handshake = handshake_id_data.substr(0, handshake_id_data.find("|"));
+    std::string user_id_str = handshake_id_data.substr(handshake_id_data.find("|") + 1);
+    int user_id = atoi(user_id_str.c_str());
+
+    std::cout << "HANDSHAKE: " << client_handshake << " USER ID: " << user_id << std::endl;
+
+    if (client_handshake == "LOGIC_MANAGEMENT")
+    {
+        std::thread(handle_logic_client, client_socket, DB, user_id).detach();
+    }
+    if (client_handshake == "MESSAGE_MANAGEMENT")
+    {
+        std::thread(handle_message_client, client_socket, DB, user_id).detach();
+    }
+    if (client_handshake == "RELATION_MANAGEMENT")
+    {
+        std::thread(handle_relations_client, client_socket, DB, user_id).detach();
+    }
+    else
+    {
+        //eventually this should be an error and reject
+	    std::thread(handle_client, client_socket, DB).detach();
+    }
+
     }
 
     close(server_socket);
