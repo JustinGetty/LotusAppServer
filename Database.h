@@ -12,9 +12,9 @@ class Database
         int check_unique_username(const std::string& username);
         std::string get_receiver_id(const std::string& reciever_username);
         std::string select_from_database_gen(const std::string& query);
-        sqlite3 get_database();
         int generic_insert_function(std::string query);
         int verify_unique_friend_request(const std::string& sender_id, const std::string& receiver_id);
+        sqlite3* get_database();
 
     private:
         sqlite3* DB;

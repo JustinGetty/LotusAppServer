@@ -262,3 +262,8 @@ int Database::verify_unique_friend_request(const std::string& sender_id, const s
     return exists;
 
 }
+
+sqlite3* Database::get_database()
+{
+    return DB;
+}

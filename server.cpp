@@ -121,66 +121,108 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
         }
 
 
-       if (data_type == "new_friend_request"){
-
-
-        std::string data = read_pipe_ended_gen_data(client_socket);
-        std::string receiver_username = data.substr(0, data.find('+')); 
-        //cast to int
-        std::string sender_id = data.substr(data.find('+') + 1); 
-        //1. check if the user exists
-        int user_exists = DB->check_unique_username(receiver_username); 
-        if (user_exists == 0)
+        if (data_type == "new_friend_request")
         {
-            //send back error that it doesnt exists
-            std::string error_msg = "User to be added does not exist|";
-            std::cout << error_msg << std::endl;
-            send(client_socket, error_msg.c_str(), error_msg.size(), 0);
-        } else if (user_exists == 1)
+            std::string data = read_pipe_ended_gen_data(client_socket);
+            std::cout << "Friend request data recieved" << data << std::endl;
+
+            std::string receiver_username = data.substr(0, data.find('+')); 
+            size_t plus_pos = data.find("+");
+            size_t dash_pos = data.find("-", plus_pos + 1);  // Start searching for '-' after '+'
+            std::string sender_id = data.substr(plus_pos + 1, dash_pos - plus_pos - 1);
+            std::string sender_username = data.substr(dash_pos + 1);
+
+            std::cout << "Receiver Username: " << receiver_username << std::endl;
+            std::cout << "Sender ID: " << sender_id << std::endl;
+            std::cout << "Sender Username: " << sender_username << std::endl;
+
+            //1. check if the user exists
+            int user_exists = DB->check_unique_username(receiver_username); 
+            if (user_exists == 0)
+            {
+                //send back error that it doesnt exists
+                std::string error_msg = "User to be added does not exist|";
+                std::cout << error_msg << std::endl;
+                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            } else if (user_exists == 1)
+            {
+                // process request
+                std::cout << "User to be added exists" << std::endl;
+
+                //get receiver id
+                std::string receiver_id = DB->get_receiver_id(receiver_username);
+
+                //check for duplicatesssssss!!!!!!!!! ADDDd----------------------
+
+                int exists = DB->verify_unique_friend_request(sender_id, receiver_id);
+
+                if (exists == 0){
+                    //process
+                    std::string query = "INSERT INTO friend_requests(sender_id, reciever_id, sender_username) VALUES('" + sender_id + "', '" + receiver_id + "', '" + sender_username + "');";
+                    int result_of_insert = DB->generic_insert_function(query);
+                    std::cout << "result of id inserts: " << result_of_insert << std::endl; 
+                    std::string error_msg = "Request Sen1!|";
+                    std::cout << error_msg << std::endl;
+                    send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+                }
+
+                else if (exists == 1){
+                    //send back duplicat message
+                    std::string error_msg = "Request to this user already pending|";
+                    std::cout << error_msg << std::endl;
+                    send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+                }
+                else {
+                    //send back error
+                    std::string error_msg = "Verification of request failed|";
+                    std::cout << error_msg << std::endl;
+                    send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+                }
+                //insert query here
+
+                //FIXXXXX-------------------------------
+                //sent back success or failure
+            } else {
+                //send another sort of error
+                std::string error_msg = "ERROR: Server error, please try again later.|";
+                std::cout << error_msg << std::endl;
+                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            }
+        } else if (data_type == "get_incoming_friends")
         {
-            // process request
-            std::cout << "User to be added exists" << std::endl;
+            sqlite3_stmt *stmt;
 
-            //get receiver id
-            std::string receiver_id = DB->get_receiver_id(receiver_username);
+            sqlite3* Database = DB->get_database();
+            std::string query = std::string("SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '") + std::to_string(user_id) + "';";
+            const char *query_cstr = query.c_str();
+            int rc;
 
-            //check for duplicatesssssss!!!!!!!!! ADDDd----------------------
-
-            int exists = DB->verify_unique_friend_request(sender_id, receiver_id);
-
-            if (exists == 0){
-                //process
-                std::string query = "INSERT INTO friend_requests(sender_id, reciever_id) VALUES('" + sender_id + "', '" + receiver_id + "');";
-                int result_of_insert = DB->generic_insert_function(query);
-                std::cout << "result of id inserts: " << result_of_insert << std::endl; 
-                std::string error_msg = "Request Send!|";
-                std::cout << error_msg << std::endl;
-                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+            rc = sqlite3_prepare_v2(Database, query_cstr, -1, &stmt, NULL);
+            if (rc != SQLITE_OK)
+            {
+                std::cerr << "Failed to prepare friend retrieval statement" << sqlite3_errmsg(Database) << std::endl;
+                //send back error here
             }
+            else if (rc == SQLITE_OK)
+            {
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+                {
+                    int sender_id = sqlite3_column_int(stmt, 0);
+                    const unsigned char *sender_username = sqlite3_column_text(stmt, 1);
 
-            if (exists == 1){
-                //send back duplicat message
-                std::string error_msg = "Request to this user already pending|";
-                std::cout << error_msg << std::endl;
-                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
+                    std::cout << "Sender ID: " << sender_id << ", Sender Username: " << sender_username << std::endl;
+                    std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char*>(sender_username)) + "|";
+                    send(client_socket, data_to_send.c_str(), sizeof(data_to_send), 0);
+                }
+                if (rc != SQLITE_DONE)
+                {
+                    std::cerr << "Error during friend iteration: " << sqlite3_errmsg(Database) << std::endl;
+                }
+                
+                sqlite3_finalize(stmt);
+                send(client_socket, "-", 1, 0);
             }
-            else {
-                //send back error
-                std::string error_msg = "Verification of request failed|";
-                std::cout << error_msg << std::endl;
-                send(client_socket, error_msg.c_str(), error_msg.size(), 0);
-            }
-            //insert query here
-
-            //FIXXXXX-------------------------------
-            //sent back success or failure
-        } else {
-            //send another sort of error
-            std::string error_msg = "ERROR: Server error, please try again later.|";
-            std::cout << error_msg << std::endl;
-            send(client_socket, error_msg.c_str(), error_msg.size(), 0);
         }
-       }
 
     else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
