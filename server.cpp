@@ -107,6 +107,17 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
 
 void handle_relations_client(int client_socket, Database* DB, int user_id)
 {
+//TODO - fix friend_requests table (1-username error)
+/* 
+
+
+
+
+
+
+
+*/
+    sqlite3* Database = DB->get_database();
     while (true)
     {
         std::cout << "Reading RELATIONS Header" << std::endl;
@@ -192,7 +203,6 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
         {
             sqlite3_stmt *stmt;
 
-            sqlite3* Database = DB->get_database();
             std::string query = std::string("SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '") + std::to_string(user_id) + "';";
             const char *query_cstr = query.c_str();
             int rc;
@@ -212,7 +222,7 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
 
                     std::cout << "Sender ID: " << sender_id << ", Sender Username: " << sender_username << std::endl;
                     std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char*>(sender_username)) + "|";
-                    send(client_socket, data_to_send.c_str(), sizeof(data_to_send), 0);
+                    send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
                 }
                 if (rc != SQLITE_DONE)
                 {
@@ -222,6 +232,15 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
                 sqlite3_finalize(stmt);
                 send(client_socket, "-", 1, 0);
             }
+        } else if (data_type == "get_user_id")
+        {
+
+            std::string username_to_check = read_pipe_ended_gen_data(client_socket);
+            std::cout << "GETTING ID FOR USERNAME: " << username_to_check;
+            std::string id_str = DB->get_receiver_id(username_to_check);
+            id_str += "|";
+            send(client_socket, id_str.c_str(), id_str.size(), 0);
+            std::cout << "ID SENT TO CLIENT" << std::endl;
         }
 
     else {
