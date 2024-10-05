@@ -15,6 +15,7 @@ class Database
         int generic_insert_function(std::string query);
         int verify_unique_friend_request(const std::string& sender_id, const std::string& receiver_id);
         sqlite3* get_database();
+        int handle_friend_request(int sender_user_id, int receiver_user_id, const std::string &status);
 
     private:
         sqlite3* DB;

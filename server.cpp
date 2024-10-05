@@ -110,12 +110,6 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
 //TODO - fix friend_requests table (1-username error)
 /* 
 
-
-
-
-
-
-
 */
     sqlite3* Database = DB->get_database();
     while (true)
@@ -189,9 +183,7 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
                     std::cout << error_msg << std::endl;
                     send(client_socket, error_msg.c_str(), error_msg.size(), 0);
                 }
-                //insert query here
 
-                //FIXXXXX-------------------------------
                 //sent back success or failure
             } else {
                 //send another sort of error
@@ -203,7 +195,7 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
         {
             sqlite3_stmt *stmt;
 
-            std::string query = std::string("SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '") + std::to_string(user_id) + "';";
+            std::string query = std::string("SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '") + std::to_string(user_id) + "' AND status = 'pending';";
             const char *query_cstr = query.c_str();
             int rc;
 
@@ -232,15 +224,27 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
                 sqlite3_finalize(stmt);
                 send(client_socket, "-", 1, 0);
             }
-        } else if (data_type == "get_user_id")
+        } else if (data_type == "accept_friend_request")
         {
+            std::string sender_id = read_pipe_ended_gen_data(client_socket); 
+            int receiver_id = user_id;
 
-            std::string username_to_check = read_pipe_ended_gen_data(client_socket);
-            std::cout << "GETTING ID FOR USERNAME: " << username_to_check;
-            std::string id_str = DB->get_receiver_id(username_to_check);
-            id_str += "|";
-            send(client_socket, id_str.c_str(), id_str.size(), 0);
-            std::cout << "ID SENT TO CLIENT" << std::endl;
+            int err_msg = DB->handle_friend_request(std::stoi(sender_id), receiver_id, "accepted");
+
+            if (err_msg != 0)
+            {
+                //send error
+                std::string msg = "accept_failed|";
+                std::cerr << msg << std::endl;
+                send(client_socket, msg.c_str(), msg.size(), 0);
+            } else if (err_msg == 0)
+            {
+                //send sucess
+                std::string msg = "accept_succeeded|";
+                std::cerr << msg << std::endl;
+                send(client_socket, msg.c_str(), msg.size(), 0);
+            }
+
         }
 
     else {
@@ -365,6 +369,18 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         else {
             std::cout << "Username not unique so its not added" << std::endl;
             }
+        } else if (data_type == "get_user_id")
+        {
+
+            std::string username_to_check = read_pipe_ended_gen_data(logic_client_socket);
+            
+            std::cout << "GETTING ID FOR USERNAME: " << username_to_check;
+            std::string id_str = DB->get_receiver_id(username_to_check);
+            id_str += "|";
+
+            std::cout << "ID_STR: " << id_str << std::endl;
+            send(logic_client_socket, id_str.c_str(), id_str.size(), 0);
+            std::cout << "ID SENT TO CLIENT" << std::endl;
         }
 
     else {

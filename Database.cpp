@@ -47,6 +47,24 @@ static int verify_callback(void *existsFlag, int argc, char **argv, char **colNa
     }
     return 0;  
 }
+
+int update_query(const std::string &query, sqlite3* DB)
+{
+    char* zErrMsg = 0;
+    const char* update_query_c = query.c_str();
+
+    int rc = sqlite3_exec(DB, update_query_c, callback, 0, &zErrMsg);
+
+    if(rc != SQLITE_OK)
+    {
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+        return -1;
+    } else {
+        fprintf(stdout, "Successfull friend request status update\n");
+        return 0;
+    }
+}
 std::string Database::select_from_database_gen(const std::string& query)
 {
     std::string val = "";
@@ -266,4 +284,29 @@ int Database::verify_unique_friend_request(const std::string& sender_id, const s
 sqlite3* Database::get_database()
 {
     return DB;
+}
+
+
+int Database::handle_friend_request(int sender_user_id, int receiver_user_id, const std::string &status)
+{
+
+    char* error_msg = 0;  
+
+    std::string accept_request_query = "UPDATE friend_requests SET status = '" + status + "' WHERE sender_id = '" + std::to_string(sender_user_id) + "' AND reciever_id = '" + std::to_string(receiver_user_id) + "';";
+
+    int stat = update_query(accept_request_query, DB);
+
+    if (stat == -1)
+    {
+        std::cerr << "Error accepting friend request, error running query" << std::endl;
+        return -1;
+
+    } else if (stat == 0)
+    {
+        std::cout << "good friend request update" << std::endl;
+        return 0;
+    } else {
+        std::cerr << "Unknown error handling friend request :(" << std::endl;
+        return -1;
+    }
 }
