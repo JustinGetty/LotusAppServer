@@ -125,7 +125,7 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
         break;
         }
 
-
+        //error handle to send message of already accepted if trying to add current friend
         if (data_type == "new_friend_request")
         {
             std::string data = read_pipe_ended_gen_data(client_socket);
@@ -195,35 +195,56 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
         {
             sqlite3_stmt *stmt;
 
-            std::string query = std::string("SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '") + std::to_string(user_id) + "' AND status = 'pending';";
+            // Prepare the query to retrieve incoming friend requests
+            std::string query = "SELECT sender_id, sender_username FROM friend_requests WHERE reciever_id = '" + std::to_string(user_id) + "' AND status = 'pending';";
             const char *query_cstr = query.c_str();
             int rc;
 
             rc = sqlite3_prepare_v2(Database, query_cstr, -1, &stmt, NULL);
             if (rc != SQLITE_OK)
             {
-                std::cerr << "Failed to prepare friend retrieval statement" << sqlite3_errmsg(Database) << std::endl;
-                //send back error here
+                std::cerr << "Failed to prepare friend retrieval statement: " << sqlite3_errmsg(Database) << std::endl;
+                // Optionally send an error message back to the client here
             }
-            else if (rc == SQLITE_OK)
+            else
             {
                 while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
                 {
                     int sender_id = sqlite3_column_int(stmt, 0);
                     const unsigned char *sender_username = sqlite3_column_text(stmt, 1);
 
+                    if (sender_username == NULL) {
+                        std::cerr << "Error: NULL sender username." << std::endl;
+                        continue;
+                    }
+
+                    std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char *>(sender_username)) + "|";
+                    ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
+
+                    if (bytes_sent == -1)
+                    {
+                        std::cerr << "Failed to send friend request data to client." << std::endl;
+                        break;
+                    }
+
                     std::cout << "Sender ID: " << sender_id << ", Sender Username: " << sender_username << std::endl;
-                    std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char*>(sender_username)) + "|";
-                    send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
                 }
+
                 if (rc != SQLITE_DONE)
                 {
-                    std::cerr << "Error during friend iteration: " << sqlite3_errmsg(Database) << std::endl;
+                    std::cerr << "Error during friend request iteration: " << sqlite3_errmsg(Database) << std::endl;
                 }
-                
+
                 sqlite3_finalize(stmt);
-                send(client_socket, "-", 1, 0);
+
+                ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
+                if (end_signal_sent == -1)
+                {
+                    std::cerr << "Failed to send termination signal to client." << std::endl;
+                }
             }
+        
+
         } else if (data_type == "accept_friend_request")
         {
             std::string sender_id = read_pipe_ended_gen_data(client_socket); 
