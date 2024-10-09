@@ -19,8 +19,6 @@ g++ -std=c++11 server.cpp Database.cpp -o server -lsqlite3
 TODO
 - Remove legacy code, ln curses, chat logs, etc. Implement logs in db
 - Restructrue legacy functions
-- Critical: New thread per client. Figure out how multiple clients will work, everytime there is 
-    a connection, create a new thread.
 - Turn all message types to ints rather than strings
 - add classes to server.cpp
 - in db, fix user to have autoincrement id and not manually pulled from server_info
@@ -28,6 +26,7 @@ TODO
     then when sent, will update live. If request is sent and user is offline, keep it in db. Same with messages. 
     Threads need to be asynchronous
 - Reorg threads to have classes or objects
+
  */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
@@ -163,7 +162,7 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
 
                 if (exists == 0){
                     //process
-                    std::string query = "INSERT INTO friend_requests(sender_id, reciever_id, sender_username) VALUES('" + sender_id + "', '" + receiver_id + "', '" + sender_username + "');";
+                    std::string query = "INSERT INTO friend_requests(sender_id, reciever_id, sender_username, receiver_username) VALUES('" + sender_id + "', '" + receiver_id + "', '" + sender_username + "', '" + receiver_username + "');";
                     int result_of_insert = DB->generic_insert_function(query);
                     std::cout << "result of id inserts: " << result_of_insert << std::endl; 
                     std::string error_msg = "Request Sen1!|";
@@ -266,7 +265,60 @@ void handle_relations_client(int client_socket, Database* DB, int user_id)
                 send(client_socket, msg.c_str(), msg.size(), 0);
             }
 
-        }
+        } else if (data_type == "get_outbound_friends")
+        {
+            sqlite3_stmt *stmt;
+
+            // Prepare the query to retrieve incoming friend requests
+            std::string query = "SELECT reciever_id, receiver_username FROM friend_requests WHERE sender_id = '" + std::to_string(user_id) + "' AND status = 'pending';";
+            const char *query_cstr = query.c_str();
+            int rc;
+
+            rc = sqlite3_prepare_v2(Database, query_cstr, -1, &stmt, NULL);
+            if (rc != SQLITE_OK)
+            {
+                std::cerr << "Failed to prepare friend retrieval statement: " << sqlite3_errmsg(Database) << std::endl;
+                // Optionally send an error message back to the client here
+            }
+            else
+            {
+                while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+                {
+                    int sender_id = sqlite3_column_int(stmt, 0);
+                    const unsigned char *sender_username = sqlite3_column_text(stmt, 1);
+
+                    if (sender_username == NULL) {
+                        std::cerr << "Error: NULL sender username." << std::endl;
+                        continue;
+                    }
+
+                    std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char *>(sender_username)) + "|";
+                    ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
+
+                    if (bytes_sent == -1)
+                    {
+                        std::cerr << "Failed to send friend request data to client." << std::endl;
+                        break;
+                    }
+
+                    std::cout << "Sender ID: " << sender_id << ", Sender Username: " << sender_username << std::endl;
+                }
+
+                if (rc != SQLITE_DONE)
+                {
+                    std::cerr << "Error during friend request iteration: " << sqlite3_errmsg(Database) << std::endl;
+                }
+
+                sqlite3_finalize(stmt);
+
+                ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
+                if (end_signal_sent == -1)
+                {
+                    std::cerr << "Failed to send termination signal to client." << std::endl;
+                }
+            }
+        } 
+
 
     else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
