@@ -26,6 +26,8 @@ TODO
     then when sent, will update live. If request is sent and user is offline, keep it in db. Same with messages. 
     Threads need to be asynchronous
 - Reorg threads to have classes or objects
+- For message system, make "active_users_in_chat" variable in message class to be set when switching to that chat to make global
+    then can be accessed in the send message and display messages, probably array of user_ids
 
  */
 std::mutex clients_mutex;
@@ -261,6 +263,25 @@ while (true)
         {
             //send sucess
             std::string msg = "accept_succeeded|";
+            std::cerr << msg << std::endl;
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        }
+
+    } else if (data_type == "decline_friend_request")
+    { 
+        std::string sender_id = read_pipe_ended_gen_data(client_socket);
+        int receiver_id = user_id;
+
+        int err_msg = DB->handle_friend_request(std::stoi(sender_id), receiver_id, "declined");
+
+        if (err_msg !=0)
+        {
+            std::string msg = "decline_failed|";
+            std::cerr << msg << std::endl;
+            send(client_socket, msg.c_str(), msg.size(), 0);
+        } else if (err_msg == 0)
+        {
+            std::string msg = "decline_succeeded|";
             std::cerr << msg << std::endl;
             send(client_socket, msg.c_str(), msg.size(), 0);
         }

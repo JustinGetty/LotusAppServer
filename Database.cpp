@@ -293,7 +293,7 @@ int Database::handle_friend_request(int sender_user_id, int receiver_user_id, co
     char* error_msg = 0;  
 
     std::string accept_request_query = "UPDATE friend_requests SET status = '" + status + "' WHERE sender_id = '" + std::to_string(sender_user_id) + "' AND reciever_id = '" + std::to_string(receiver_user_id) + "';";
-    std::cout << "Accept Query: " << accept_request_query << std::endl;
+    std::cout << "Update Friend Query: " << accept_request_query << std::endl;
     int stat = update_query(accept_request_query, DB);
 
     if (stat == -1)
