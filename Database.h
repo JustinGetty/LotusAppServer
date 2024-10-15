@@ -1,7 +1,7 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 #include <sqlite3.h>
-
+#include <vector>
 class Database
 {
     public:
@@ -16,6 +16,7 @@ class Database
         int verify_unique_friend_request(const std::string& sender_id, const std::string& receiver_id);
         sqlite3* get_database();
         int handle_friend_request(int sender_user_id, int receiver_user_id, const std::string &status);
+        std::vector<std::vector<std::string>> pull_chat_messages(std::vector<int> member_id_list);
 
     private:
         sqlite3* DB;

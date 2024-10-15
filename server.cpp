@@ -65,7 +65,7 @@ std::string read_pipe_ended_gen_data(int client_socket)
     }
     return data;
 }
-
+//user_id is client's id
 void handle_message_client(int client_socket, Database* DB, int user_id)
 {
     while (true)
@@ -94,8 +94,27 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
              }
 	    }
         }
+    if(data_type == "init_chat")
+    {
+        
+        //recv the id's of everyone in the chat, for now just 1. Later refactor to except arr for gc
+        std::string msg_id = read_pipe_ended_gen_data(client_socket);
+        std::cout << "ID read to init chat: " << msg_id << std::endl;
+        std::vector<int> member_id_list = {stoi(msg_id), user_id};
+        std::vector<std::vector<std::string>> chats =  DB->pull_chat_messages(member_id_list);
 
-    else {
+        for(auto data : chats)
+        {
+            std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\|";
+            ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
+        }
+        ssize_t bytes_sent = send(client_socket, "-", 1, 0);
+        std::cout << "Finished initializing chat" << std::endl;
+        //pull all chat times, sender, and content per id in messages table
+
+
+
+    } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
 	}
     }

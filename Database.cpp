@@ -310,3 +310,30 @@ int Database::handle_friend_request(int sender_user_id, int receiver_user_id, co
         return -1;
     }
 }
+std::vector<std::vector<std::string>> Database::pull_chat_messages(std::vector<int> member_id_list)
+{
+    std::string query = "SELECT timestamp, sender_username, message_text FROM messages WHERE sender_id = '" 
+                    + std::to_string(member_id_list[0]) + "' AND receiver_1 = '" + std::to_string(member_id_list[1]) + "'"
+                    "UNION "
+                    "SELECT timestamp, sender_username, message_text FROM messages WHERE sender_id = '" 
+                    + std::to_string(member_id_list[1]) + "' AND receiver_1 = '" + std::to_string(member_id_list[0]) + "';";
+
+    std::vector<std::vector<std::string>> result;
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(DB, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(DB) << std::endl;
+        return result;
+    }
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::vector<std::string> row;
+        for (int i = 0; i < 3; ++i) {
+            const unsigned char* val = sqlite3_column_text(stmt, i);
+            row.emplace_back(val ? reinterpret_cast<const char*>(val) : "");
+        }
+
+        result.push_back(row);
+    }
+    sqlite3_finalize(stmt);
+    return result; 
+}
