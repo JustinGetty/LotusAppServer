@@ -11,6 +11,7 @@
 #include <vector>
 #include "Database.h"
 #include <sqlite3.h>
+#include "OnlineManager.h"
 
 /* 
 Compile:
@@ -112,6 +113,18 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
         std::cout << "Finished initializing chat" << std::endl;
         //pull all chat times, sender, and content per id in messages table
 
+
+
+    } else if (data_type == "incoming_message")
+    {
+        //receive user_id
+
+        //check if user is online, if yes send to them then log
+
+        //if offline, log
+        
+        //strat on client side is going to be load messages once when client launches, then append new ones.
+        //Only refresh on new launch. Add the new message to wherever in memory its being stored.
 
 
     } else {
@@ -563,6 +576,7 @@ int main()
 {
 	
 	Database* DB = new Database;
+    OnlineManager user_management_system;
 
     std::string chat_line;
     std::cout << "Starting the server ..." << std::endl;
@@ -654,6 +668,7 @@ int main()
     }
     else if (client_handshake == "MESSAGE_MANAGEMENT")
     {
+        user_management_system.addUser(user_id, client_socket);
         std::thread(handle_message_client, client_socket, DB, user_id).detach();
     }
     else if (client_handshake == "RELATION_MANAGEMENT")
