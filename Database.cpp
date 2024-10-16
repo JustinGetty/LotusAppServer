@@ -337,3 +337,31 @@ std::vector<std::vector<std::string>> Database::pull_chat_messages(std::vector<i
     sqlite3_finalize(stmt);
     return result; 
 }
+
+std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages(int user_id)
+{
+    std::string query = "SELECT timestamp, sender_username, sender_id, receiver_1, message_text FROM messages WHERE sender_id = '" 
+                    + std::to_string(user_id) + "' "
+                    "UNION "
+                    "SELECT timestamp, sender_username, sender_id, receiver_1, message_text FROM messages WHERE receiver_1 = '" 
+                    + std::to_string(user_id) + "';";
+
+    std::vector<std::vector<std::string>> result;
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(DB, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(DB) << std::endl;
+        return result;
+    }
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::vector<std::string> row;
+        for (int i = 0; i < 5; ++i) {
+            const unsigned char* val = sqlite3_column_text(stmt, i);
+            row.emplace_back(val ? reinterpret_cast<const char*>(val) : "");
+        }
+
+        result.push_back(row);
+    }
+    sqlite3_finalize(stmt);
+    return result; 
+}

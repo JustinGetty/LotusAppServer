@@ -115,6 +115,18 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
 
 
 
+    } else if (data_type == "get_all_chats")
+    {
+        std::vector<std::vector<std::string>> chats =  DB->pull_non_exclusive_chat_messages(user_id);
+
+        for(auto data : chats)
+        {
+            std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
+            ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
+        }
+        ssize_t bytes_sent = send(client_socket, "-", 1, 0);
+        std::cout << "Finished sending all chats" << std::endl;
+    
     } else if (data_type == "incoming_message")
     {
         //receive user_id
