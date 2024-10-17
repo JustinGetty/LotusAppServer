@@ -142,6 +142,7 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
     for (const auto& data : chats)
     {
         std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
+        std::cout << "DATA SENT: " << data_sendable << std::endl;
         ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
         if (bytes_sent == -1)
         {

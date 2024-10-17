@@ -359,7 +359,7 @@ std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages
             const unsigned char* val = sqlite3_column_text(stmt, i);
             row.emplace_back(val ? reinterpret_cast<const char*>(val) : "");
         }
-
+        //std::cout << "MESSAGE CONTENT: " << row[4] << std::endl;
         result.push_back(row);
     }
     sqlite3_finalize(stmt);
