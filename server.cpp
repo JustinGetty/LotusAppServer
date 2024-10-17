@@ -12,7 +12,10 @@
 #include "Database.h"
 #include <sqlite3.h>
 #include "OnlineManager.h"
-
+#include <chrono>
+#include <ctime>
+#include <iomanip>  // For std::put_time
+#include <sstream>
 /* 
 Compile:
 g++ -std=c++11 server.cpp Database.cpp -o server -lsqlite3
@@ -34,6 +37,23 @@ TODO
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
 
+std::string getCurrentTimestamp() {
+    // Get the current time as a time_point
+    auto now = std::chrono::system_clock::now();
+
+    // Convert time_point to time_t, which represents calendar time
+    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+
+    // Convert time_t to tm structure for local time
+    std::tm* local_time = std::localtime(&now_time);
+
+    // Create a stringstream to format the timestamp as a string
+    std::ostringstream timestamp;
+    timestamp << std::put_time(local_time, "%Y-%m-%d %H:%M:%S");
+
+    // Return the formatted string
+    return timestamp.str();
+}
 std::string read_header(int client_socket) {
     std::string header;
     char c;
@@ -129,14 +149,70 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
     
     } else if (data_type == "incoming_message")
     {
-        //receive user_id
+        std::string data;
+        char c;
+        bool found_backslash = false;  // To track when '\' is found
 
-        //check if user is online, if yes send to them then log
+        while (true) {
+            ssize_t bytes_received = recv(client_socket, &c, 1, 0);
+            if (bytes_received <= 0) {
+                data = "";
+                std::cerr << "ERROR: no data received in message" << std::endl;
+                break;
+            }
+            data += c;
+            if (found_backslash && c == '|') {
+                break;  
+            }
+            found_backslash = (c == '\\');
+        }
+        std::cout << "BROKEN: DATA: " << data << std::endl;
+        if (!data.empty()) {
+    // Find the position of '\\-'
+    size_t dash_pos = data.find("\\-");
+    if (dash_pos != std::string::npos) {
+        // Extract the username
+        std::string username = data.substr(0, dash_pos);
 
-        //if offline, log
-        
-        //strat on client side is going to be load messages once when client launches, then append new ones.
-        //Only refresh on new launch. Add the new message to wherever in memory its being stored.
+        // Find the position of '\\+'
+        size_t plus_pos = data.find("\\+", dash_pos + 2);
+        if (plus_pos != std::string::npos) {
+            // Extract the user ID between '\\-' and '\\+'
+            std::string user_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
+            int receiver_user_id = std::stoi(user_id_str);  // Convert the user ID to an integer
+
+            // Find the position of '\\|' for the message delimiter
+            size_t pipe_pos = data.find("\\|", plus_pos + 2);
+            if (pipe_pos != std::string::npos) {
+                // Extract the message content between '\\+' and '\\|'
+                std::string message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
+
+                // Print the extracted values
+                std::cout << "Username: " << username << " UserID: " << receiver_user_id << " Message: " << message_contents << std::endl;
+            }
+        }
+    }
+    //check if user is online, if yes send to them then log.
+    int sender_socket = user_management_system.getSocket(receiver_user_id);
+    //aka user is online
+    if(sender_socket != -1)
+    {
+        std::string timestamp = getCurrentTimestamp();
+
+        //need to send timestamp, sender_username, sender_id, receiver_id, contents
+        std::string message_complete = timestamp + "\\+" + username + "\\-" + user_id + "\\]" + receiver_user_id + "\\[" + message_contents + "\\|";  
+        ssize_t bytes_sent = send(sender_socket, message_complete.c_str(), message_complete.size(), 0);
+
+        //log in database
+    }
+    else{
+        //log in database
+    }
+
+    //if offline, log
+    
+    //strat on client side is going to be load messages once when client launches, then append new ones.
+    //Only refresh on new launch. Add the new message to wherever in memory its being stored.
 
 
     } else {
