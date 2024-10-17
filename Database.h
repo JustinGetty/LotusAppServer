@@ -18,6 +18,7 @@ class Database
         int handle_friend_request(int sender_user_id, int receiver_user_id, const std::string &status);
         std::vector<std::vector<std::string>> pull_chat_messages(std::vector<int> member_id_list);
         std::vector<std::vector<std::string>> pull_non_exclusive_chat_messages(int user_id);
+        int insert_message_into_database(int sender_id, int receiver_1, std::string message_test, std::string sender_username);
 
     private:
         sqlite3* DB;

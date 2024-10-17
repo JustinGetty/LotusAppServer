@@ -365,3 +365,8 @@ std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages
     sqlite3_finalize(stmt);
     return result; 
 }
+
+int Database::insert_message_into_database(int sender_id, int receiver_1, std::string message_text, std::string sender_username)
+{
+    return -1;
+}

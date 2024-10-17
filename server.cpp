@@ -87,7 +87,7 @@ std::string read_pipe_ended_gen_data(int client_socket)
     return data;
 }
 //user_id is client's id
-void handle_message_client(int client_socket, Database* DB, int user_id)
+void handle_message_client(int client_socket, Database* DB, OnlineManager& user_management_system, int user_id)
 {
     while (true)
     {
@@ -137,82 +137,85 @@ void handle_message_client(int client_socket, Database* DB, int user_id)
 
     } else if (data_type == "get_all_chats")
     {
-        std::vector<std::vector<std::string>> chats =  DB->pull_non_exclusive_chat_messages(user_id);
+    std::vector<std::vector<std::string>> chats = DB->pull_non_exclusive_chat_messages(user_id);
 
-        for(auto data : chats)
+    for (const auto& data : chats)
+    {
+        std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
+        ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
+        if (bytes_sent == -1)
         {
-            std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
-            ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
+            std::cerr << "Failed to send chat message data to client." << std::endl;
+            break;
         }
-        ssize_t bytes_sent = send(client_socket, "-", 1, 0);
-        std::cout << "Finished sending all chats" << std::endl;
-    
-    } else if (data_type == "incoming_message")
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
+    if (end_signal_sent == -1)
     {
-        std::string data;
-        char c;
-        bool found_backslash = false;  // To track when '\' is found
-
-        while (true) {
-            ssize_t bytes_received = recv(client_socket, &c, 1, 0);
-            if (bytes_received <= 0) {
-                data = "";
-                std::cerr << "ERROR: no data received in message" << std::endl;
-                break;
-            }
-            data += c;
-            if (found_backslash && c == '|') {
-                break;  
-            }
-            found_backslash = (c == '\\');
-        }
-        std::cout << "BROKEN: DATA: " << data << std::endl;
-        if (!data.empty()) {
-    // Find the position of '\\-'
-    size_t dash_pos = data.find("\\-");
-    if (dash_pos != std::string::npos) {
-        // Extract the username
-        std::string username = data.substr(0, dash_pos);
-
-        // Find the position of '\\+'
-        size_t plus_pos = data.find("\\+", dash_pos + 2);
-        if (plus_pos != std::string::npos) {
-            // Extract the user ID between '\\-' and '\\+'
-            std::string user_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
-            int receiver_user_id = std::stoi(user_id_str);  // Convert the user ID to an integer
-
-            // Find the position of '\\|' for the message delimiter
-            size_t pipe_pos = data.find("\\|", plus_pos + 2);
-            if (pipe_pos != std::string::npos) {
-                // Extract the message content between '\\+' and '\\|'
-                std::string message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
-
-                // Print the extracted values
-                std::cout << "Username: " << username << " UserID: " << receiver_user_id << " Message: " << message_contents << std::endl;
-            }
-        }
-    }
-    //check if user is online, if yes send to them then log.
-    int sender_socket = user_management_system.getSocket(receiver_user_id);
-    //aka user is online
-    if(sender_socket != -1)
-    {
-        std::string timestamp = getCurrentTimestamp();
-
-        //need to send timestamp, sender_username, sender_id, receiver_id, contents
-        std::string message_complete = timestamp + "\\+" + username + "\\-" + user_id + "\\]" + receiver_user_id + "\\[" + message_contents + "\\|";  
-        ssize_t bytes_sent = send(sender_socket, message_complete.c_str(), message_complete.size(), 0);
-
-        //log in database
-    }
-    else{
-        //log in database
+        std::cerr << "Failed to send termination signal to client." << std::endl;
     }
 
-    //if offline, log
+    std::cout << "Finished sending all chats" << std::endl;
     
-    //strat on client side is going to be load messages once when client launches, then append new ones.
-    //Only refresh on new launch. Add the new message to wherever in memory its being stored.
+    } else if (data_type == "incoming_message") {
+    std::string data;
+    char c;
+    bool found_backslash = false;  // To track when '\' is found
+    std::string username;          // Declare username
+    std::string message_contents;  // Declare message_contents
+
+    while (true) {
+        ssize_t bytes_received = recv(client_socket, &c, 1, 0);  // Declare bytes_received
+        if (bytes_received <= 0) {
+            data = "";
+            std::cerr << "ERROR: no data received in message" << std::endl;
+            break;
+        }
+        data += c;
+        if (found_backslash && c == '|') {
+            break;
+        }
+        found_backslash = (c == '\\');
+    }
+
+    std::cout << "BROKEN: DATA: " << data << std::endl;
+    int receiver_user_id;
+    if (!data.empty()) {
+        size_t dash_pos = data.find("\\-");
+        if (dash_pos != std::string::npos) {
+            username = data.substr(0, dash_pos);
+
+            size_t plus_pos = data.find("\\+", dash_pos + 2);
+            if (plus_pos != std::string::npos) {
+                std::string user_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
+                receiver_user_id = std::stoi(user_id_str);  // Declare receiver_user_id
+
+                size_t pipe_pos = data.find("\\|", plus_pos + 2);
+                if (pipe_pos != std::string::npos) {
+                    message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
+
+                    std::cout << "Username: " << username << " UserID: " << receiver_user_id << " Message: " << message_contents << std::endl;
+                }
+            }
+        }
+
+        int sender_socket = user_management_system.getSocket(receiver_user_id);
+        if (sender_socket != -1) {
+            std::string timestamp = getCurrentTimestamp();
+            std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(receiver_user_id) + "\\[" + message_contents + "\\|";
+            ssize_t bytes_sent = send(sender_socket, message_complete.c_str(), message_complete.size(), 0);
+            // Log in database
+            std::string insert_query = "INSERT INTO messages(sender_id, receiver_1, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(receiver_user_id) + "', '" + message_contents + "', '" + username + "');";
+            int insert_status = DB->generic_insert_function(insert_query);
+        } else {
+            // Log in database
+            std::string insert_query = "INSERT INTO messages(sender_id, receiver_1, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(receiver_user_id) + "', '" + message_contents + "', '" + username + "');";
+            int insert_status = DB->generic_insert_function(insert_query);
+        }
+    }
+
 
 
     } else {
@@ -340,6 +343,7 @@ while (true)
                 }
 
                 std::string data_to_send = std::to_string(sender_id) + "+" + std::string(reinterpret_cast<const char *>(sender_username)) + "|";
+                std::cout << "DATA TO SEND IN get_incoming_friend_requests: " << data_to_send << std::endl;
                 ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
 
                 if (bytes_sent == -1)
@@ -757,7 +761,7 @@ int main()
     else if (client_handshake == "MESSAGE_MANAGEMENT")
     {
         user_management_system.addUser(user_id, client_socket);
-        std::thread(handle_message_client, client_socket, DB, user_id).detach();
+        std::thread(handle_message_client, client_socket, std::ref(DB), std::ref(user_management_system), user_id).detach();
     }
     else if (client_handshake == "RELATION_MANAGEMENT")
     {
