@@ -19,6 +19,8 @@ class Database
         std::vector<std::vector<std::string>> pull_chat_messages(std::vector<int> member_id_list);
         std::vector<std::vector<std::string>> pull_non_exclusive_chat_messages(int user_id);
         int insert_message_into_database(int sender_id, int receiver_1, std::string message_test, std::string sender_username);
+        int create_conversation(const std::string& conversation_name);
+        bool addMemberToConversation(int conversation_id, int user_id);
 
     private:
         sqlite3* DB;

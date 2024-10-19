@@ -370,3 +370,51 @@ int Database::insert_message_into_database(int sender_id, int receiver_1, std::s
 {
     return -1;
 }
+
+int Database::create_conversation(const std::string& conversation_name)
+{
+    std::string query = "INSERT INTO conversations (conversation_name) VALUES ('" + conversation_name + "');";
+
+    char* zErrMsg = 0;
+    const char* insert_query = query.c_str();
+
+    int rc = sqlite3_exec(DB, insert_query, nullptr, nullptr, &zErrMsg);
+
+    if (rc != SQLITE_OK)
+    {
+        fprintf(stderr, "SQL error: %s\n", zErrMsg);
+        sqlite3_free(zErrMsg);
+        return -1;
+    }
+    else
+    {
+        fprintf(stdout, "Successful insertion\n");
+    }
+
+    int conversation_id = static_cast<int>(sqlite3_last_insert_rowid(DB));
+    return conversation_id;
+}
+
+bool Database::addMemberToConversation(int conversation_id, int user_id) {
+    std::string sql = "INSERT INTO conversation_members (conversation_id, user_id) VALUES (?, ?);";
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(get_database(), sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(get_database()) << std::endl;
+        return false;
+    }
+
+    sqlite3_bind_int(stmt, 1, conversation_id);
+    sqlite3_bind_int(stmt, 2, user_id);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        std::cerr << "Failed to insert member: " << sqlite3_errmsg(get_database()) << std::endl;
+        sqlite3_finalize(stmt);
+        return false;
+    }
+
+    sqlite3_finalize(stmt);
+    return true;
+}
+

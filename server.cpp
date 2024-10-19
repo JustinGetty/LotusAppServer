@@ -363,6 +363,8 @@ while (true)
 
             sqlite3_finalize(stmt);
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
             ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
             if (end_signal_sent == -1)
             {
@@ -513,12 +515,51 @@ while (true)
 
             sqlite3_finalize(stmt);
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
             if (end_signal_sent == -1)
             {
                 std::cerr << "Failed to send termination signal to client." << std::endl;
             }
         }
+    } else if (data_type == "new_conversation") 
+    {
+        std::string buff = read_pipe_ended_gen_data(client_socket);
+        buff += "|";
+        std::vector<int> id_list;
+        int count = 0;
+        char i = buff[count];
+
+        while (i != '|') 
+        {
+            std::string tmp_str = "";
+            while (i != '-' && i != '|') {
+                tmp_str += i;
+                count++;
+                
+                if (count >= buff.length()) break;
+                
+                i = buff[count];
+            }
+            if (!tmp_str.empty()) {
+                id_list.push_back(std::stoi(tmp_str));
+            }
+            count++;
+            if (count < buff.length()) {
+                i = buff[count];
+            } else {
+                break;
+            }
+        }
+        int conversation_id = DB->create_conversation("");
+
+        for(auto &id : id_lists)
+        {
+            bool status = DB->addMemberToConversation(conversation_id, id);
+        }
+        //send back good status
+        //pick up here
+
     } else {
         std::cerr << "Unkown message data type: " << data_type << std::endl;
 }
