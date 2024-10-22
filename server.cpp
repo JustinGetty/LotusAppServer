@@ -94,7 +94,6 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
         std::cout << "Reading MESSAGE Header" << std::endl;
         std::string data_type = read_header(client_socket);
         std::cout << "data type read: " << data_type << std::endl;
-        std::cout << "MESSAGE THREAD WORKING" << std::endl;
         
         if (data_type.empty()) {
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
@@ -243,7 +242,6 @@ while (true)
     std::string data_type = read_header(client_socket);
     std::cout << "data type read: " << data_type << std::endl;
     
-    std::cout << "RELATIONS THREAD WORKING" << std::endl;
 
     if (data_type.empty()) {
     std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
@@ -525,6 +523,7 @@ while (true)
     } else if (data_type == "new_conversation") 
     {
         std::string buff = read_pipe_ended_gen_data(client_socket);
+        std::cout << "Buffer: " << buff << std::endl;
         buff += "|";
         std::vector<int> id_list;
         int count = 0;
@@ -534,6 +533,7 @@ while (true)
         {
             std::string tmp_str = "";
             while (i != '-' && i != '|') {
+                std::cout << "i = " << i << std::endl;
                 tmp_str += i;
                 count++;
                 
@@ -552,17 +552,94 @@ while (true)
             }
         }
         int conversation_id = DB->create_conversation("");
-
-        for(auto &id : id_lists)
+        id_list.push_back(user_id);
+        for(auto &id : id_list)
         {
             bool status = DB->addMemberToConversation(conversation_id, id);
         }
         //send back good status
         //pick up here
 
-    } else {
+} else if (data_type == "get_user_convos") 
+{
+    sqlite3_stmt *stmt;
+
+    // Parameterized query to prevent SQL injection
+    std::string query = "SELECT c.conversation_id, c.conversation_name, cm.user_id AS member_id, u.username AS member_username "
+                        "FROM conversations c "
+                        "JOIN conversation_members cm ON c.conversation_id = cm.conversation_id "
+                        "JOIN users u ON cm.user_id = u.id "
+                        "WHERE c.conversation_id IN ( "
+                        "    SELECT conversation_id "
+                        "    FROM conversation_members "
+                        "    WHERE user_id = ? "
+                        ") "
+                        "ORDER BY c.conversation_id;";
+
+    int rc = sqlite3_prepare_v2(Database, query.c_str(), -1, &stmt, NULL);
+    if (rc != SQLITE_OK)
+    {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(Database) << std::endl;
+    }
+    else
+    {
+        // Bind user_id to the query
+        sqlite3_bind_int(stmt, 1, user_id);
+        
+        int prev_convo_id = -1;
+        while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+        {
+            int conversation_id = sqlite3_column_int(stmt, 0);
+            const unsigned char *conversation_name = sqlite3_column_text(stmt, 1);
+            int conversation_member_id = sqlite3_column_int(stmt, 2);
+            const unsigned char *conversation_member_username = sqlite3_column_text(stmt, 3);
+
+            std::string data_to_send;
+            if (conversation_id != prev_convo_id)
+            {
+                // New conversation, send a termination signal for the previous conversation
+                if (prev_convo_id != -1)
+                {
+                    send(client_socket, "-", 1, 0);
+                }
+
+                // Send conversation ID and name
+                data_to_send = std::to_string(conversation_id) + "+" + 
+                               (conversation_name ? reinterpret_cast<const char *>(conversation_name) : "") + "|";
+                ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
+                data_to_send = std::to_string(conversation_member_id) + "+" + 
+                               (conversation_member_username ? reinterpret_cast<const char *>(conversation_member_username) : "") + "|";
+            }
+            else
+            {
+                // Send member ID and username
+                data_to_send = std::to_string(conversation_member_id) + "+" + 
+                               (conversation_member_username ? reinterpret_cast<const char *>(conversation_member_username) : "") + "|";
+            }
+
+            ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
+            if (bytes_sent == -1)
+            {
+                std::cerr << "Failed to send data to client." << std::endl;
+                break;
+            }
+
+            prev_convo_id = conversation_id;
+        }
+
+        if (rc != SQLITE_DONE)
+        {
+            std::cerr << "SQLite error: " << sqlite3_errmsg(Database) << std::endl;
+        }
+
+        // Finalize statement and send termination signal
+        sqlite3_finalize(stmt);
+        send(client_socket, "--", 2, 0);
+    }
+} else {
         std::cerr << "Unkown message data type: " << data_type << std::endl;
-}
+    }
+    
 }
 {
 std::lock_guard<std::mutex> lock(clients_mutex);
@@ -578,7 +655,6 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         std::cout << "Reading LOGIC Header" << std::endl;
         std::string data_type = read_header(logic_client_socket);
         std::cout << "data type read: " << data_type << std::endl;
-        std::cout << "LOGIC THREAD WORKING" << std::endl;
 
         if (data_type.empty()) {
         std::cerr << "Error: Client Disconnected or No Header Sent" << std::endl;
