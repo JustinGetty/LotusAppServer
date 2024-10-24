@@ -600,27 +600,30 @@ while (true)
                 // New conversation, send a termination signal for the previous conversation
                 if (prev_convo_id != -1)
                 {
-                    send(client_socket, "-", 1, 0);
+                    // Send termination signal with delimiter
+                    if (send(client_socket, "-|", 2, 0) == -1)
+                    {
+                        std::cerr << "Failed to send conversation termination signal." << std::endl;
+                        break;
+                    }
                 }
 
-                // Send conversation ID and name
+                // Send conversation ID and name, ensure name is included even if empty
                 data_to_send = std::to_string(conversation_id) + "+" + 
                                (conversation_name ? reinterpret_cast<const char *>(conversation_name) : "") + "|";
-                ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
-                data_to_send = std::to_string(conversation_member_id) + "+" + 
-                               (conversation_member_username ? reinterpret_cast<const char *>(conversation_member_username) : "") + "|";
-            }
-            else
-            {
-                // Send member ID and username
-                data_to_send = std::to_string(conversation_member_id) + "+" + 
-                               (conversation_member_username ? reinterpret_cast<const char *>(conversation_member_username) : "") + "|";
+                if (send(client_socket, data_to_send.c_str(), data_to_send.size(), 0) == -1)
+                {
+                    std::cerr << "Failed to send conversation data." << std::endl;
+                    break;
+                }
             }
 
-            ssize_t bytes_sent = send(client_socket, data_to_send.c_str(), data_to_send.size(), 0);
-            if (bytes_sent == -1)
+            // Send member ID and username
+            data_to_send = std::to_string(conversation_member_id) + "+" + 
+                           (conversation_member_username ? reinterpret_cast<const char *>(conversation_member_username) : "") + "|";
+            if (send(client_socket, data_to_send.c_str(), data_to_send.size(), 0) == -1)
             {
-                std::cerr << "Failed to send data to client." << std::endl;
+                std::cerr << "Failed to send member data." << std::endl;
                 break;
             }
 
@@ -632,9 +635,22 @@ while (true)
             std::cerr << "SQLite error: " << sqlite3_errmsg(Database) << std::endl;
         }
 
-        // Finalize statement and send termination signal
+        // Finalize statement and send termination signals
         sqlite3_finalize(stmt);
-        send(client_socket, "--", 2, 0);
+        if (prev_convo_id != -1)
+        {
+            // Send termination signal for the last conversation
+            if (send(client_socket, "-|", 2, 0) == -1)
+            {
+                std::cerr << "Failed to send final conversation termination signal." << std::endl;
+            }
+        }
+
+        // Send end-of-data signal
+        if (send(client_socket, "--|", 3, 0) == -1)
+        {
+            std::cerr << "Failed to send end-of-data signal." << std::endl;
+        }
     }
 } else {
         std::cerr << "Unkown message data type: " << data_type << std::endl;
