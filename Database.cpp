@@ -340,11 +340,11 @@ std::vector<std::vector<std::string>> Database::pull_chat_messages(std::vector<i
 
 std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages(int user_id)
 {
-    std::string query = "SELECT timestamp, sender_username, sender_id, receiver_1, message_text FROM messages WHERE sender_id = '" 
-                    + std::to_string(user_id) + "' "
-                    "UNION "
-                    "SELECT timestamp, sender_username, sender_id, receiver_1, message_text FROM messages WHERE receiver_1 = '" 
-                    + std::to_string(user_id) + "';";
+    std::string query = "SELECT DISTINCT m.timestamp, m.sender_username, m.sender_id, m.conversation_id, m.message_text "
+                        "FROM messages m "
+                        "JOIN conversation_members cm ON m.conversation_id = cm.conversation_id "
+                        "WHERE m.sender_id = ? OR cm.user_id = ? "
+                        "ORDER BY m.timestamp;";
 
     std::vector<std::vector<std::string>> result;
     sqlite3_stmt* stmt;
@@ -353,13 +353,20 @@ std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages
         std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(DB) << std::endl;
         return result;
     }
+
+    if (sqlite3_bind_int(stmt, 1, user_id) != SQLITE_OK ||
+        sqlite3_bind_int(stmt, 2, user_id) != SQLITE_OK) {
+        std::cerr << "Failed to bind parameters: " << sqlite3_errmsg(DB) << std::endl;
+        sqlite3_finalize(stmt);
+        return result;
+    }
+
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         std::vector<std::string> row;
         for (int i = 0; i < 5; ++i) {
             const unsigned char* val = sqlite3_column_text(stmt, i);
             row.emplace_back(val ? reinterpret_cast<const char*>(val) : "");
         }
-        //std::cout << "MESSAGE CONTENT: " << row[4] << std::endl;
         result.push_back(row);
     }
     sqlite3_finalize(stmt);
@@ -417,4 +424,30 @@ bool Database::addMemberToConversation(int conversation_id, int user_id) {
     sqlite3_finalize(stmt);
     return true;
 }
+
+std::vector<int> Database::getUserIdsInConversation(int conversation_id) {
+    std::vector<int> user_ids;
+    std::string query = "SELECT user_id FROM conversation_members WHERE conversation_id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(DB, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(DB) << std::endl;
+        return user_ids;
+    }
+
+    if (sqlite3_bind_int(stmt, 1, conversation_id) != SQLITE_OK) {
+        std::cerr << "Failed to bind parameter: " << sqlite3_errmsg(DB) << std::endl;
+        sqlite3_finalize(stmt);
+        return user_ids;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        int user_id = sqlite3_column_int(stmt, 0); 
+        user_ids.push_back(user_id); 
+    }
+
+    sqlite3_finalize(stmt);
+    return user_ids;
+}
+
 

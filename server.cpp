@@ -136,85 +136,96 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
 
     } else if (data_type == "get_all_chats")
     {
-    std::vector<std::vector<std::string>> chats = DB->pull_non_exclusive_chat_messages(user_id);
+        std::vector<std::vector<std::string>> chats = DB->pull_non_exclusive_chat_messages(user_id);
 
-    for (const auto& data : chats)
-    {
-        std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
-        std::cout << "DATA SENT: " << data_sendable << std::endl;
-        ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
-        if (bytes_sent == -1)
+        for (const auto& data : chats)
         {
-            std::cerr << "Failed to send chat message data to client." << std::endl;
-            break;
-        }
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-    ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
-    if (end_signal_sent == -1)
-    {
-        std::cerr << "Failed to send termination signal to client." << std::endl;
-    }
-
-    std::cout << "Finished sending all chats" << std::endl;
-    
-    } else if (data_type == "incoming_message") {
-    std::string data;
-    char c;
-    bool found_backslash = false;  // To track when '\' is found
-    std::string username;          // Declare username
-    std::string message_contents;  // Declare message_contents
-
-    while (true) {
-        ssize_t bytes_received = recv(client_socket, &c, 1, 0);  // Declare bytes_received
-        if (bytes_received <= 0) {
-            data = "";
-            std::cerr << "ERROR: no data received in message" << std::endl;
-            break;
-        }
-        data += c;
-        if (found_backslash && c == '|') {
-            break;
-        }
-        found_backslash = (c == '\\');
-    }
-
-    std::cout << "BROKEN: DATA: " << data << std::endl;
-    int receiver_user_id;
-    if (!data.empty()) {
-        size_t dash_pos = data.find("\\-");
-        if (dash_pos != std::string::npos) {
-            username = data.substr(0, dash_pos);
-
-            size_t plus_pos = data.find("\\+", dash_pos + 2);
-            if (plus_pos != std::string::npos) {
-                std::string user_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
-                receiver_user_id = std::stoi(user_id_str);  // Declare receiver_user_id
-
-                size_t pipe_pos = data.find("\\|", plus_pos + 2);
-                if (pipe_pos != std::string::npos) {
-                    message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
-
-                    std::cout << "Username: " << username << " UserID: " << receiver_user_id << " Message: " << message_contents << std::endl;
-                }
+            std::string data_sendable = data[0] + "\\+" + data[1] + "\\-" + data[2] + "\\]" + data[3] + "\\[" + data[4] + "\\|";
+            std::cout << "DATA SENT: " << data_sendable << std::endl;
+            ssize_t bytes_sent = send(client_socket, data_sendable.c_str(), data_sendable.size(), 0);
+            if (bytes_sent == -1)
+            {
+                std::cerr << "Failed to send chat message data to client." << std::endl;
+                break;
             }
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-        int sender_socket = user_management_system.getSocket(receiver_user_id);
-        if (sender_socket != -1) {
-            std::string timestamp = getCurrentTimestamp();
-            std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(receiver_user_id) + "\\[" + message_contents + "\\|";
-            ssize_t bytes_sent = send(sender_socket, message_complete.c_str(), message_complete.size(), 0);
-            // Log in database
-            std::string insert_query = "INSERT INTO messages(sender_id, receiver_1, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(receiver_user_id) + "', '" + message_contents + "', '" + username + "');";
-            int insert_status = DB->generic_insert_function(insert_query);
-        } else {
-            // Log in database
-            std::string insert_query = "INSERT INTO messages(sender_id, receiver_1, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(receiver_user_id) + "', '" + message_contents + "', '" + username + "');";
+        ssize_t end_signal_sent = send(client_socket, "-", 1, 0);
+        if (end_signal_sent == -1)
+        {
+            std::cerr << "Failed to send termination signal to client." << std::endl;
+        }
+
+        std::cout << "Finished sending all chats" << std::endl;
+    
+    } else if (data_type == "incoming_message") {
+        std::string data;
+        char c;
+        bool found_backslash = false;  // To track when '\' is found
+        std::string username;          // Declare username
+        std::string message_contents;  // Declare message_contents
+
+        while (true) {
+            ssize_t bytes_received = recv(client_socket, &c, 1, 0);  // Declare bytes_received
+            if (bytes_received <= 0) {
+                data = "";
+                std::cerr << "ERROR: no data received in message" << std::endl;
+                break;
+            }
+            data += c;
+            if (found_backslash && c == '|') {
+                break;
+            }
+            found_backslash = (c == '\\');
+        }
+
+        std::cout << "BROKEN: DATA: " << data << std::endl;
+        int conversation_id;
+        if (!data.empty()) {
+            size_t dash_pos = data.find("\\-");
+            if (dash_pos != std::string::npos) {
+                username = data.substr(0, dash_pos);
+
+                size_t plus_pos = data.find("\\+", dash_pos + 2);
+                if (plus_pos != std::string::npos) {
+                    std::string convo_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
+                    conversation_id = std::stoi(convo_id_str);  // Declare receiver_user_id
+
+                    size_t pipe_pos = data.find("\\|", plus_pos + 2);
+                    if (pipe_pos != std::string::npos) {
+                        message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
+
+                        std::cout << "Username: " << username << " Conversation ID: " << conversation_id << " Message: " << message_contents << std::endl;
+                    }
+                }
+            }
+        
+
+            std::vector<int> conversation_member_ids = DB->getUserIdsInConversation(conversation_id);
+            std::vector<int> convo_member_sockets;
+
+            for(auto &id : conversation_member_ids)
+            {
+                if(id != user_id)
+                {
+                    int socket = user_management_system.getSocket(id);
+                    convo_member_sockets.push_back(socket);
+                }
+            }
+
+            for(int &sock : convo_member_sockets)
+            {
+                if (sock != -1) {
+                    std::string timestamp = getCurrentTimestamp();
+                    std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(conversation_id) + "\\[" + message_contents + "\\|";
+                    ssize_t bytes_sent = send(sock, message_complete.c_str(), message_complete.size(), 0);
+                }
+            }
+
+            std::string insert_query = "INSERT INTO messages(sender_id, conversation_id, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(conversation_id) + "', '" + message_contents + "', '" + username + "');";
             int insert_status = DB->generic_insert_function(insert_query);
         }
-    }
 
 
 

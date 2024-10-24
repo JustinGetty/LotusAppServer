@@ -21,6 +21,7 @@ class Database
         int insert_message_into_database(int sender_id, int receiver_1, std::string message_test, std::string sender_username);
         int create_conversation(const std::string& conversation_name);
         bool addMemberToConversation(int conversation_id, int user_id);
+        std::vector<int> getUserIdsInConversation(int conversation_id);
 
     private:
         sqlite3* DB;
