@@ -15,6 +15,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>  // For std::put_time
+#include "user.h"
 #include <sstream>
 /* 
 Compile:
@@ -674,7 +675,7 @@ client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), c
 }
 close(client_socket);
 }
-void handle_logic_client(int logic_client_socket, Database* DB)
+void handle_logic_client(int logic_client_socket, Database* DB, user* User)
 {
     //once verified, pull user id and assign to this thread
     while (true)
@@ -688,8 +689,8 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         break;
         }
 
-	 if (data_type == "verify_user")
-     {
+    if (data_type == "verify_user")
+    {
         std::cerr << "HIT VERIFY USER" << std::endl;
         std::string data;
         char buffer[1024];
@@ -697,7 +698,7 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         if (bytes_rec > 0)
         {
 //---Breaking here, not recieving fill buffer, something else is receiving the beginning
-            data = std::string(buffer, bytes_rec);
+        data = std::string(buffer, bytes_rec);
             std::cout << "Recieved user data to verify: " << data << std::endl;
         }
         else 
@@ -731,8 +732,8 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         }
         std::cout << "Verification completed" << std::endl;
 
-     } else if (data_type == "new_user")
-     {
+    } else if (data_type == "new_user")
+    {
         std::cerr << "New User Process Started -----------" << std::endl;
         //add pfp insert later
         std::string data;
@@ -785,22 +786,69 @@ void handle_logic_client(int logic_client_socket, Database* DB)
         else {
             std::cout << "Username not unique so its not added" << std::endl;
             }
-        } else if (data_type == "get_user_id")
+    } else if (data_type == "get_user_id")
+    {
+
+        std::string username_to_check = read_pipe_ended_gen_data(logic_client_socket);
+        
+        std::cout << "GETTING ID FOR USERNAME: " << username_to_check;
+        std::string id_str = DB->get_receiver_id(username_to_check);
+        User->set_user_id(std::stoi(id_str));
+        id_str += "|";
+
+        std::cout << "ID_STR: " << id_str << std::endl;
+        send(logic_client_socket, id_str.c_str(), id_str.size(), 0);
+        std::cout << "ID SENT TO CLIENT" << std::endl;
+    } else if (data_type == "upload_pfp")
+    {
+        uint64_t image_size;
+        if (recv(logic_client_socket, &image_size, sizeof(image_size), 0) == 0)
         {
-
-            std::string username_to_check = read_pipe_ended_gen_data(logic_client_socket);
-            
-            std::cout << "GETTING ID FOR USERNAME: " << username_to_check;
-            std::string id_str = DB->get_receiver_id(username_to_check);
-            id_str += "|";
-
-            std::cout << "ID_STR: " << id_str << std::endl;
-            send(logic_client_socket, id_str.c_str(), id_str.size(), 0);
-            std::cout << "ID SENT TO CLIENT" << std::endl;
+            std::cout << "Received image size" << std::endl;
         }
-
-    else {
-         std::cerr << "Unkown message data type: " << data_type << std::endl;
+        else
+        {
+            std::cerr << "Failed to receive image size." << std::endl;
+        }
+        std::vector<char> buffer(image_size);
+        size_t total_bytes_rec = 0;
+        while (total_bytes_rec < image_size)
+        {
+            ssize_t bytes_received = recv(logic_client_socket, buffer.data() + total_bytes_rec, image_size - total_bytes_rec, 0);
+            if (bytes_received <= 0)
+            {
+                std::cerr << "Failed to receive image data" << std::endl;
+                break;
+            }
+            total_bytes_rec += bytes_received;
+        }
+        if(image_size == total_bytes_rec)
+        {
+            std::cout << "Image data received successfully." << std::endl;
+            std::string file_name = "PFP_DATA/profile_picture_user_" + std::to_string(User->get_user_id());
+            std::ofstream outFile(file_name, std::ios::binary);
+            if (outFile)
+            {
+                outFile.write(buffer.data(), buffer.size());
+                outFile.close();
+                  std::string query = "UPDATE users SET profile_picture_path = '" + file_name + "' WHERE id = " + std::to_string(User->get_user_id()) + ";";
+                DB->generic_insert_function(query);
+                std::cout << "Image saved successfully as " << file_name << std::endl;
+            }
+            else
+            {
+                std::cerr << "Failed to open file for writing: " << file_name << std::endl;
+            }
+        }
+        else
+        {
+            std::cerr << "Mismatch between expected and received image size." << std::endl;
+        }
+    } else if (data_type == "get_profile_pic")
+    {
+        
+    } else {
+        std::cerr << "Unkown message data type: " << data_type << std::endl;
 	}
     }
     {
@@ -814,27 +862,8 @@ int main()
 	
 	Database* DB = new Database;
     OnlineManager user_management_system;
-
     std::string chat_line;
     std::cout << "Starting the server ..." << std::endl;
-
-    std::cout << "_____Message History Below_____" << std::endl;
-
-    std::fstream chat_logs("chat_logs", std::ios::in | std::ios::out | std::ios::app);
-    if (!chat_logs.is_open())
-    {
-        std::cerr << "Error opening chat log file!" << std::endl;
-        return 1;
-    }
-
-    while (getline(chat_logs, chat_line))
-    {
-	if (chat_line != "")
-	{
-            std::cout << chat_line << std::endl;
-	}
-    }
-    chat_logs.close();
 
     //create socket (af_inet = ipv4, sock_stream = tcp, 0 is default for something idk
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -877,49 +906,51 @@ int main()
     while (true)
     {
 
-    int client_socket = accept(server_socket, NULL, NULL);
-	if (client_socket == -1)
-	{
-	std::cerr << "Error accepting connection!" << std::endl;
-	close(server_socket);
-	return 1;
+        int client_socket = accept(server_socket, NULL, NULL);
+    	if (client_socket == -1)
+    	{
+            std::cerr << "Error accepting connection!" << std::endl;
+            close(server_socket);
+            return 1;
+        }
+
+    	{
+    	    std::lock_guard<std::mutex> lock(clients_mutex);
+    	    client_sockets.push_back(client_socket);
     	}
 
-	{
-	    std::lock_guard<std::mutex> lock(clients_mutex);
-	    client_sockets.push_back(client_socket);
-	}
 
+        std::string handshake_id_data = read_pipe_ended_gen_data(client_socket);
 
-    std::string handshake_id_data = read_pipe_ended_gen_data(client_socket);
+        std::string client_handshake = handshake_id_data.substr(0, handshake_id_data.find("+"));
+        std::string user_id_str = handshake_id_data.substr(handshake_id_data.find("+") + 1);
+        int user_id = atoi(user_id_str.c_str());
 
-    std::string client_handshake = handshake_id_data.substr(0, handshake_id_data.find("+"));
-    std::string user_id_str = handshake_id_data.substr(handshake_id_data.find("+") + 1);
-    int user_id = atoi(user_id_str.c_str());
+        std::cout << "HANDSHAKE: " << client_handshake << " USER ID: " << user_id << std::endl;
 
-    std::cout << "HANDSHAKE: " << client_handshake << " USER ID: " << user_id << std::endl;
+        
+        if (client_handshake == "LOGIC_MANAGEMENT")
+        {
+            user* User = new user;
+            std::thread(handle_logic_client, client_socket, std::ref(DB), User).detach();
+        }
+        else if (client_handshake == "MESSAGE_MANAGEMENT")
+        {
+            user_management_system.addUser(user_id, client_socket);
+            std::thread(handle_message_client, client_socket, std::ref(DB), std::ref(user_management_system), user_id).detach();
+        }
+        else if (client_handshake == "RELATION_MANAGEMENT")
+        {
+            std::thread(handle_relations_client, client_socket, DB, user_id).detach();
+        }
+        else
+        {
+            //eventually this should be an error and reject
+    	    //std::thread(handle_client, client_socket, DB).detach();
+        }
 
-    if (client_handshake == "LOGIC_MANAGEMENT")
-    {
-        std::thread(handle_logic_client, client_socket, DB).detach();
-    }
-    else if (client_handshake == "MESSAGE_MANAGEMENT")
-    {
-        user_management_system.addUser(user_id, client_socket);
-        std::thread(handle_message_client, client_socket, std::ref(DB), std::ref(user_management_system), user_id).detach();
-    }
-    else if (client_handshake == "RELATION_MANAGEMENT")
-    {
-        std::thread(handle_relations_client, client_socket, DB, user_id).detach();
-    }
-    else
-    {
-        //eventually this should be an error and reject
-	    //std::thread(handle_client, client_socket, DB).detach();
-    }
+        }
 
-    }
-
-    close(server_socket);
-    return 0;
+        close(server_socket);
+        return 0;
 }
