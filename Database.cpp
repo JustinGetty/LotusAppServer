@@ -87,6 +87,36 @@ std::string Database::select_from_database_gen(const std::string& query)
     }
     return val;
 }
+std::string Database::get_profile_pic_from_db(const std::string& query)
+{
+    std::string val = "";
+    const char* id_query_cstr = query.c_str();
+    sqlite3_stmt* statement;
+
+    int result = sqlite3_prepare_v2(DB, id_query_cstr, -1, &statement, 0);
+
+    if (result == SQLITE_OK)
+    {
+        std::cout << "good gen query" << std::endl;
+        int step_result = sqlite3_step(statement);
+        if (step_result == SQLITE_ROW)
+        {
+            // Retrieve the value as a text string instead of an integer
+            const unsigned char* text_val = sqlite3_column_text(statement, 0);
+            if (text_val)
+            {
+                val = reinterpret_cast<const char*>(text_val);
+            }
+            sqlite3_finalize(statement);
+        }
+    }
+    else
+    {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(DB) << std::endl;
+        return "ERROR IN FUNCTION: select_from_database_gen";
+    }
+    return val;
+}
 
 int Database::generic_insert_function(std::string query)
 {

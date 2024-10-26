@@ -22,6 +22,7 @@ class Database
         int create_conversation(const std::string& conversation_name);
         bool addMemberToConversation(int conversation_id, int user_id);
         std::vector<int> getUserIdsInConversation(int conversation_id);
+        std::string get_profile_pic_from_db(const std::string& query);
 
     private:
         sqlite3* DB;

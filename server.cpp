@@ -846,7 +846,67 @@ void handle_logic_client(int logic_client_socket, Database* DB, user* User)
         }
     } else if (data_type == "get_profile_pic")
     {
+           // Step 1: Retrieve the user ID
+        int user_id = User->get_user_id(); // Assuming you have the user ID stored in the User object
+
+        // Step 2: Query the database to get the profile picture path
+        std::string query = "SELECT profile_picture_path FROM users WHERE id = '" + std::to_string(user_id) + "';";
+        std::string result = DB->get_profile_pic_from_db(query);
+        std::cout << "PROFILE PICTURE PATH: " << result << std::endl;
         
+        if (result.empty())
+        {
+            std::cerr << "No profile picture found for user with ID: " << user_id << std::endl;
+            return;
+        }
+
+        std::string file_path = result;
+        if (file_path.empty())
+        {
+            std::cerr << "Profile picture path is empty for user with ID: " << user_id << std::endl;
+            return;
+        }
+
+        std::ifstream file(file_path, std::ios::binary);
+        if (!file.is_open())
+        {
+            std::cerr << "Failed to open file: " << file_path << std::endl;
+            return;
+        }
+
+        std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+
+        uint64_t image_size = buffer.size();
+        if (send(logic_client_socket, &image_size, sizeof(image_size), 0) < 0)
+        {
+            std::cerr << "Failed to send the image size." << std::endl;
+            return;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        size_t total_bytes_sent = 0;
+        while (total_bytes_sent < image_size)
+        {
+            ssize_t bytes_sent = send(logic_client_socket, buffer.data() + total_bytes_sent, image_size - total_bytes_sent, 0);
+            if (bytes_sent <= 0)
+            {
+                std::cerr << "Failed to send image data." << std::endl;
+                break;
+            }
+            total_bytes_sent += bytes_sent;
+            std::cout << "Total Bytes Sent: " << total_bytes_sent << std::endl;
+        }
+
+        if (total_bytes_sent == image_size)
+        {
+            std::cout << "Profile picture sent successfully for user with ID: " << user_id << std::endl;
+        }
+        else
+        {
+            std::cerr << "Failed to send complete image data for user with ID: " << user_id << std::endl;
+        } 
     } else {
         std::cerr << "Unkown message data type: " << data_type << std::endl;
 	}
