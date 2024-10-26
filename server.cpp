@@ -17,6 +17,10 @@
 #include <iomanip>  // For std::put_time
 #include "user.h"
 #include <sstream>
+#include <filesystem>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 /* 
 Compile:
 g++ -std=c++11 server.cpp Database.cpp -o server -lsqlite3
@@ -162,73 +166,131 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
     
     } else if (data_type == "incoming_message") {
         std::string data;
-        char c;
-        bool found_backslash = false;  // To track when '\' is found
-        std::string username;          // Declare username
-        std::string message_contents;  // Declare message_contents
+    char c;
+    bool found_backslash = false;
+    std::string username;
+    std::string message_contents;
+    int conversation_id;
+    int image_size = 0;
 
-        while (true) {
-            ssize_t bytes_received = recv(client_socket, &c, 1, 0);  // Declare bytes_received
-            if (bytes_received <= 0) {
-                data = "";
-                std::cerr << "ERROR: no data received in message" << std::endl;
-                break;
-            }
-            data += c;
-            if (found_backslash && c == '|') {
-                break;
-            }
-            found_backslash = (c == '\\');
+    // Read message metadata until '\\|'
+    while (true) {
+        ssize_t bytes_received = recv(client_socket, &c, 1, 0);
+        if (bytes_received <= 0) {
+            data = "";
+            std::cerr << "ERROR: no data received in message" << std::endl;
+            break;
         }
+        data += c;
+        if (found_backslash && c == '|') {
+            break;
+        }
+        found_backslash = (c == '\\');
+    }
 
-        std::cout << "BROKEN: DATA: " << data << std::endl;
-        int conversation_id;
-        if (!data.empty()) {
-            size_t dash_pos = data.find("\\-");
-            if (dash_pos != std::string::npos) {
-                username = data.substr(0, dash_pos);
+    if (!data.empty()) {
+        // Parse data
+        size_t dash_pos = data.find("\\-");
+        if (dash_pos != std::string::npos) {
+            username = data.substr(0, dash_pos);
 
-                size_t plus_pos = data.find("\\+", dash_pos + 2);
-                if (plus_pos != std::string::npos) {
-                    std::string convo_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
-                    conversation_id = std::stoi(convo_id_str);  // Declare receiver_user_id
+            size_t plus_pos = data.find("\\+", dash_pos + 2);
+            if (plus_pos != std::string::npos) {
+                std::string convo_id_str = data.substr(dash_pos + 2, plus_pos - (dash_pos + 2));
+                conversation_id = std::stoi(convo_id_str);
 
-                    size_t pipe_pos = data.find("\\|", plus_pos + 2);
+                size_t dollar_pos = data.find("\\$", plus_pos + 2);
+                if (dollar_pos != std::string::npos) {
+                    message_contents = data.substr(plus_pos + 2, dollar_pos - (plus_pos + 2));
+
+                    size_t pipe_pos = data.find("\\|", dollar_pos + 2);
                     if (pipe_pos != std::string::npos) {
-                        message_contents = data.substr(plus_pos + 2, pipe_pos - (plus_pos + 2));
-
-                        std::cout << "Username: " << username << " Conversation ID: " << conversation_id << " Message: " << message_contents << std::endl;
+                        std::string image_size_str = data.substr(dollar_pos + 2, pipe_pos - (dollar_pos + 2));
+                        image_size = std::stoi(image_size_str);
                     }
                 }
             }
-        
-
-            std::vector<int> conversation_member_ids = DB->getUserIdsInConversation(conversation_id);
-            std::vector<int> convo_member_sockets;
-
-            for(auto &id : conversation_member_ids)
-            {
-                if(id != user_id)
-                {
-                    int socket = user_management_system.getSocket(id);
-                    convo_member_sockets.push_back(socket);
-                }
-            }
-
-            for(int &sock : convo_member_sockets)
-            {
-                if (sock != -1) {
-                    std::string timestamp = getCurrentTimestamp();
-                    std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(conversation_id) + "\\[" + message_contents + "\\|";
-                    ssize_t bytes_sent = send(sock, message_complete.c_str(), message_complete.size(), 0);
-                }
-            }
-
-            std::string insert_query = "INSERT INTO messages(sender_id, conversation_id, message_text, sender_username)VALUES('" + std::to_string(user_id) + "', '" + std::to_string(conversation_id) + "', '" + message_contents + "', '" + username + "');";
-            int insert_status = DB->generic_insert_function(insert_query);
         }
 
+        // Read image data if present
+        std::vector<char> image_data;
+        if (image_size > 0) {
+            image_data.resize(image_size);
+            size_t total_received = 0;
+            while (total_received < image_size) {
+                ssize_t bytes_received = recv(client_socket, &image_data[total_received], image_size - total_received, 0);
+                if (bytes_received <= 0) {
+                    std::cerr << "ERROR: Failed to receive image data" << std::endl;
+                    break;
+                }
+                total_received += bytes_received;
+            }
+        }
 
+        // **Insert the message into the database without image_path**
+        std::string insert_query = "INSERT INTO messages(sender_id, conversation_id, message_text, sender_username) VALUES(?, ?, ?, ?);";
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(DB->get_database(), insert_query.c_str(), -1, &stmt, nullptr);
+        sqlite3_bind_int(stmt, 1, user_id);
+        sqlite3_bind_int(stmt, 2, conversation_id);
+        sqlite3_bind_text(stmt, 3, message_contents.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 4, username.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "ERROR: Failed to insert message into database." << std::endl;
+        }
+        sqlite3_finalize(stmt);
+
+        // **Retrieve the last inserted message_id**
+        int message_id = sqlite3_last_insert_rowid(DB->get_database());
+
+        std::string image_path = "";
+        if (image_size > 0) {
+            // **Save image data to file with message_id in filename**
+            std::string image_directory = "./IMAGEMESSAGE/";
+            std::string image_filename = "image_message" + std::to_string(message_id);
+            image_path = image_directory + image_filename;
+
+            // Ensure directory exists
+            struct stat st = {0};
+            if (stat(image_directory.c_str(), &st) == -1) {
+                mkdir(image_directory.c_str(), 0700);
+            }
+
+            std::ofstream image_file(image_path, std::ios::binary);
+            if (image_file) {
+                image_file.write(image_data.data(), image_data.size());
+                image_file.close();
+            } else {
+                std::cerr << "ERROR: Unable to save image to file" << std::endl;
+            }
+
+            // **Update the image_path in the database for this message_id**
+            std::string update_query = "UPDATE messages SET image_path = ? WHERE message_id = ?;";
+            sqlite3_prepare_v2(DB->get_database(), update_query.c_str(), -1, &stmt, nullptr);
+            sqlite3_bind_text(stmt, 1, image_path.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_int(stmt, 2, message_id);
+            if (sqlite3_step(stmt) != SQLITE_DONE) {
+                std::cerr << "ERROR: Failed to update image_path in database." << std::endl;
+            }
+            sqlite3_finalize(stmt);
+        }
+
+        // **Send message to conversation members**
+        std::vector<int> conversation_member_ids = DB->getUserIdsInConversation(conversation_id);
+        for (auto &id : conversation_member_ids) {
+            if (id != user_id) {
+                int sock = user_management_system.getSocket(id);
+                if (sock != -1) {
+                    std::string timestamp = getCurrentTimestamp();
+                    std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(conversation_id) + "\\[" + message_contents + "\\$" + std::to_string(image_size) + "\\#" + std::to_string(message_id) + "\\|";
+                    send(sock, message_complete.c_str(), message_complete.size(), 0);
+                    if (image_size > 0) {
+                        send(sock, image_data.data(), image_size, 0);
+                    }
+                }
+            }
+        }
+    }
 
     } else {
          std::cerr << "Unkown message data type: " << data_type << std::endl;
@@ -965,7 +1027,6 @@ int main()
     //handle incoming connections
     while (true)
     {
-
         int client_socket = accept(server_socket, NULL, NULL);
     	if (client_socket == -1)
     	{
