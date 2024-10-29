@@ -370,11 +370,11 @@ std::vector<std::vector<std::string>> Database::pull_chat_messages(std::vector<i
 
 std::vector<std::vector<std::string>> Database::pull_non_exclusive_chat_messages(int user_id)
 {
-    std::string query = "SELECT DISTINCT m.timestamp, m.sender_username, m.sender_id, m.conversation_id, m.message_text, m.image_path, m.message_id "
+    std::string query = "SELECT DISTINCT strftime('%s', m.timestamp) AS unix_timestamp, m.sender_username, m.sender_id, m.conversation_id, m.message_text, m.image_path, m.message_id "
                         "FROM messages m "
                         "JOIN conversation_members cm ON m.conversation_id = cm.conversation_id "
                         "WHERE m.sender_id = ? OR cm.user_id = ? "
-                        "ORDER BY m.timestamp;";
+                        "ORDER BY unix_timestamp;";
 
     std::vector<std::vector<std::string>> result;
     sqlite3_stmt* stmt;
