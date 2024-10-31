@@ -167,7 +167,7 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
                     if(bytes_sent > 0)
                     {
                         //send image
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         ssize_t image_bytes_sent = send(client_socket, image_data.data(), image_size, 0);
 
                         if (image_bytes_sent == image_size)
