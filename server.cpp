@@ -41,6 +41,7 @@ TODO
  */
 std::mutex clients_mutex;
 std::vector<int> client_sockets;
+//
 
 std::string getCurrentTimestamp() {
     // Get the current time as a time_point
