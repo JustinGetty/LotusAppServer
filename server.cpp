@@ -23,7 +23,7 @@
 
 /* 
 Compile:
-g++ -std=c++11 server.cpp Database.cpp -o server -lsqlite3
+g++ -std=c++17 server.cpp OnlineManager.cpp Database.cpp user.cpp -o server -lsqlite3
 
 TODO
 - Remove legacy code, ln curses, chat logs, etc. Implement logs in db
@@ -973,6 +973,13 @@ void handle_logic_client(int logic_client_socket, Database* DB, user* User)
         if (result.empty())
         {
             std::cerr << "No profile picture found for user with ID: " << user_id << std::endl;
+            std::string no_pfp_image_size = "0";
+            ssize_t size_bytes = send(logic_client_socket, no_pfp_image_size.c_str(), no_pfp_image_size.size(), 0);
+            if (size_bytes > 0)
+            {
+                std::cout << "sent image size" << std::endl;
+            }
+            
             return;
         }
 
