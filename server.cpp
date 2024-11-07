@@ -47,19 +47,13 @@ std::string getCurrentTimestamp() {
     // Get the current time as a time_point
     auto now = std::chrono::system_clock::now();
 
-    // Convert time_point to time_t, which represents calendar time
+    // Convert time_point to time_t, which represents calendar time in seconds since epoch
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
 
-    // Convert time_t to tm structure for local time
-    std::tm* local_time = std::localtime(&now_time);
-
-    // Create a stringstream to format the timestamp as a string
-    std::ostringstream timestamp;
-    timestamp << std::put_time(local_time, "%Y-%m-%d %H:%M:%S");
-
-    // Return the formatted string
-    return timestamp.str();
+    // Convert time_t to string and return
+    return std::to_string(now_time);
 }
+
 std::string read_header(int client_socket) {
     std::string header;
     char c;
@@ -336,8 +330,12 @@ void handle_message_client(int client_socket, Database* DB, OnlineManager& user_
                     int sock = user_management_system.getSocket(id);
                     if (sock != -1) {
                         std::string timestamp = getCurrentTimestamp();
-                        std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(conversation_id) + "\\[" + message_contents + "\\$" + std::to_string(image_size) + "\\#" + std::to_string(message_id) + "\\|";
-                        send(sock, message_complete.c_str(), message_complete.size(), 0);
+                        std::string message_complete = timestamp + "\\+" + username + "\\-" + std::to_string(user_id) + "\\]" + std::to_string(conversation_id) + "\\[" + message_contents + "\\$" + std::to_string(image_size) + "\\&" + std::to_string(message_id) + "\\|";
+                        ssize_t message_bytes = send(sock, message_complete.c_str(), message_complete.size(), 0);
+                        if (message_bytes > 0)
+                        {
+                            std::cout << "Message sent: " << message_complete << std::endl;
+                        }
                         if (image_size > 0) {
                             send(sock, image_data.data(), image_size, 0);
                         }
